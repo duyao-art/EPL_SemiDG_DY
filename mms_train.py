@@ -26,7 +26,7 @@ from utils.custom_collate import SegCollate
 gpus = default_config['gpus']
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-wandb.init(project='MNMS_seg', entity='du-yao',
+wandb.init(project='MNMS_SemiDG', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
 
