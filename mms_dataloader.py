@@ -720,7 +720,7 @@ class ImageFolder(data.Dataset):
         # pytorch: N,C,H,W
 
     def __len__(self):
-        return len(self.imgs)
+        return len(self.imgs) - 1
 
 
 if __name__ == '__main__':
