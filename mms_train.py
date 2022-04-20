@@ -50,10 +50,10 @@ def pre_data(batch_size, num_workers, test_vendor):
 
     unlabel_dataset = ConcatDataset(
         [domain_1_unlabeled_dataset, domain_2_unlabeled_dataset, domain_3_unlabeled_dataset])
-    # unlabel_dataset = domain_2_unlabeled_dataset
 
     print("before length of label_dataset", len(label_dataset))
-
+    # match the dimension between labeled and unlabeled dataset for mix.
+    # this operation is similar for mix-match
     new_labeldata_num = len(unlabel_dataset) // len(label_dataset) + 1
     new_label_dataset = label_dataset
     for i in range(new_labeldata_num):
@@ -110,8 +110,6 @@ def dice_loss(pred, target):
     tflat = target.contiguous().view(-1)
     intersection = (iflat * tflat).sum()
 
-    #A_sum = torch.sum(tflat * iflat)
-    #B_sum = torch.sum(tflat * tflat)
     loss = ((2. * intersection + smooth) /
             (iflat.sum() + tflat.sum() + smooth)).mean()
 
@@ -120,6 +118,7 @@ def dice_loss(pred, target):
 
 def total_dice_loss(pred, target):
 
+    # the output is a 4d tensor (batch=size, class dimension, H, W)
     dice_loss_lv = dice_loss(pred[:, 0, :, :], target[:, 0, :, :])
     dice_loss_myo = dice_loss(pred[:, 1, :, :], target[:, 1, :, :])
     dice_loss_rv = dice_loss(pred[:, 2, :, :], target[:, 2, :, :])
@@ -139,6 +138,7 @@ def ini_model(restore=False, restore_from=None):
         print("restore from ", model_path_r)
     else:
         # two models with different init
+        # check if it is the need to update two models simultaneously, or weight decay
         model_l = my_net(modelname='mydeeplabV3P')
         model_r = my_net(modelname='mydeeplabV3P')
 
@@ -150,6 +150,7 @@ def ini_model(restore=False, restore_from=None):
 
     model_r = nn.DataParallel(model_r, device_ids=gpus, output_device=gpus[0])
     model_l = nn.DataParallel(model_l, device_ids=gpus, output_device=gpus[0])
+
     return model_l, model_r
 
 
@@ -164,6 +165,7 @@ def ini_optimizer(model_l, model_r, learning_rate, weight_decay):
 
 
 def cal_variance(pred, aug_pred):
+
     kl_distance = nn.KLDivLoss(reduction='none')
     sm = torch.nn.Softmax(dim=1)
     log_sm = torch.nn.LogSoftmax(dim=1)
@@ -174,26 +176,28 @@ def cal_variance(pred, aug_pred):
     return variance, exp_variance
 
 
+# try to use mean-teacher similar network to replace the current two parallel models.
 def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer_r, optimizer_l, cross_criterion, epoch):
+
     # loss data
     total_loss = []
     total_loss_l = []
     total_loss_r = []
     total_cps_loss = []
     total_con_loss = []
+
     # tqdm
     bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
     pbar = tqdm(range(niters_per_epoch),
                 file=sys.stdout, bar_format=bar_format)
-    kl_distance = nn.KLDivLoss(reduction='none')
-    sm = torch.nn.Softmax(dim=1)
-    log_sm = torch.nn.LogSoftmax(dim=1)
 
     for idx in pbar:
+
         minibatch = label_dataloader.next()
         unsup_minibatch_0 = unlabel_dataloader_0.next()
         unsup_minibatch_1 = unlabel_dataloader_1.next()
 
+        # Multiple dictionary in self-defined Dataset
         imgs = minibatch['img']
         aug_imgs = minibatch['aug_img']
         mask = minibatch['mask']
@@ -203,6 +207,7 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
 
         aug_unsup_imgs_0 = unsup_minibatch_0['aug_img']
         aug_unsup_imgs_1 = unsup_minibatch_1['aug_img']
+
         mask_params = unsup_minibatch_0['mask_params']
 
         imgs = imgs.to(device)
@@ -217,6 +222,7 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
         mask_params = mask_params.to(device)
 
         batch_mix_masks = mask_params
+
         # unlabeled mixed images
         unsup_imgs_mixed = unsup_imgs_0 * \
             (1 - batch_mix_masks) + unsup_imgs_1 * batch_mix_masks
@@ -225,26 +231,31 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
             (1 - batch_mix_masks) + aug_unsup_imgs_1 * batch_mix_masks
 
         # add uncertainty
+        # this step is to generate pseudo labels
         with torch.no_grad():
             # Estimate the pseudo-label with model_l using original data
             logits_u0_tea_1, _ = model_l(unsup_imgs_0)
             logits_u1_tea_1, _ = model_l(unsup_imgs_1)
             logits_u0_tea_1 = logits_u0_tea_1.detach()
             logits_u1_tea_1 = logits_u1_tea_1.detach()
+
             aug_logits_u0_tea_1, _ = model_l(aug_unsup_imgs_0)
             aug_logits_u1_tea_1, _ = model_l(aug_unsup_imgs_1)
             aug_logits_u0_tea_1 = aug_logits_u0_tea_1.detach()
             aug_logits_u1_tea_1 = aug_logits_u1_tea_1.detach()
+
             # Estimate the pseudo-label with model_r using augmentated data
             logits_u0_tea_2, _ = model_r(unsup_imgs_0)
             logits_u1_tea_2, _ = model_r(unsup_imgs_1)
             logits_u0_tea_2 = logits_u0_tea_2.detach()
             logits_u1_tea_2 = logits_u1_tea_2.detach()
+
             aug_logits_u0_tea_2, _ = model_r(aug_unsup_imgs_0)
             aug_logits_u1_tea_2, _ = model_r(aug_unsup_imgs_1)
             aug_logits_u0_tea_2 = aug_logits_u0_tea_2.detach()
             aug_logits_u1_tea_2 = aug_logits_u1_tea_2.detach()
 
+        # the augmented data is used to calculate the average pseudo label
         logits_u0_tea_1 = (logits_u0_tea_1 + aug_logits_u0_tea_1) / 2
         logits_u1_tea_1 = (logits_u1_tea_1 + aug_logits_u1_tea_1) / 2
         logits_u0_tea_2 = (logits_u0_tea_2 + aug_logits_u0_tea_2) / 2
@@ -253,8 +264,10 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
         # Mix teacher predictions using same mask
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
+
         logits_cons_tea_1 = logits_u0_tea_1 * \
             (1 - batch_mix_masks) + logits_u1_tea_1 * batch_mix_masks
+        # guess the pseudo labels for each pixel
         _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
         ps_label_1 = ps_label_1.long()
 
@@ -284,6 +297,7 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
         # supervised loss on both models
         pre_sup_l, feature_l = model_l(imgs)
         pre_sup_r, feature_r = model_r(imgs)
+
         # dice loss
         sof_l = F.softmax(pre_sup_l, dim=1)
         sof_r = F.softmax(pre_sup_r, dim=1)
@@ -291,26 +305,27 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
         loss_r = total_dice_loss(sof_r, mask)
         loss_l = total_dice_loss(sof_l, mask)
 
+        # contrastive loss /supervised / unsupervised
         # contrastive loss SupConLoss
         # features means different views
         # feature_l = feature_l.unsqueeze(1)
         # feature_r = feature_r.unsqueeze(1)
         # features = torch.cat((feature_l, feature_r),dim=1)
-
         # supconloss = SupConLoss()
         # con_loss = supconloss(features)
+
+        # 这里作者并没有将对比损失的loss,加入进去,可以在这里尝试重新构造.
+
         con_loss = 1
         optimizer_l.zero_grad()
         optimizer_r.zero_grad()
-        # if epoch <= 2:
-        #     loss = loss_l + loss_r + con_loss
-        # else:
-        # loss = loss_l + loss_r + con_loss + cps_loss
         loss = loss_l + loss_r + cps_loss
 
         loss.backward()
         optimizer_l.step()
         optimizer_r.step()
+
+        # 这里是两个模型同时加载,更新,比较费资源;是否可以采用mean-teacher, 进行修改
 
         total_loss.append(loss.item())
         total_loss_l.append(loss_l.item())
@@ -329,17 +344,11 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
 
 # use the function to calculate the valid loss or test loss
 def test_dual(model_l, model_r, loader):
+
     model_l.eval()
     model_r.eval()
 
     loss = []
-    t_loss = 0
-    r_loss = 0
-    dice_loss_lv = 0
-    dice_loss_myo = 0
-    dice_loss_rv = 0
-    dice_loss_bg = 0
-
     tot = 0
     tot_lv = 0
     tot_myo = 0
@@ -359,6 +368,7 @@ def test_dual(model_l, model_r, loader):
         sof_r = F.softmax(logits_r, dim=1)
 
         pred = (sof_l + sof_r) / 2
+        # 这里可以考虑下文章2中对于预测结果的筛选,作为负标签做contrastive loss.
         pred = (pred > 0.5).float()
 
         # loss
@@ -378,7 +388,6 @@ def test_dual(model_l, model_r, loader):
         tot_rv += dice_coeff(pred[:, 2, :, :], mask[:, 2, :, :], device).item()
 
     r_loss = sum(loss) / len(loss)
-
     dice_lv = tot_lv/len(loader)
     dice_myo = tot_myo/len(loader)
     dice_rv = tot_rv/len(loader)
@@ -441,7 +450,7 @@ def train(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_loa
         # loss
         wandb.log({'epoch': epoch + 1, 'loss/total_loss': total_loss, 'loss/total_loss_l': total_loss_l,
                   'loss/total_loss_r': total_loss_r, 'loss/total_cps_loss': total_cps_loss,
-                   'loss/test_loss': test_loss, 'loss/val_loss': val_loss, 'loss/con_loss': total_con_loss })
+                   'loss/test_loss': test_loss, 'loss/val_loss': val_loss, 'loss/con_loss': total_con_loss})
 
         # if the model improves, save a checkpoint at this epoch
         if val_dice > best_dice:
@@ -455,6 +464,7 @@ def train(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_loa
 
 
 def main():
+
     batch_size = config['batch_size']
     num_workers = config['num_workers']
     learning_rate = config['learning_rate']
@@ -463,16 +473,18 @@ def main():
     model_path = config['model_path']
     test_vendor = config['test_vendor']
 
-    label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_loader, num_label_imgs, num_unsup_imgs = pre_data(
-        batch_size=batch_size, num_workers=num_workers, test_vendor=test_vendor)
+    label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_loader, num_label_imgs, num_unsup_imgs = \
+        pre_data(batch_size=batch_size, num_workers=num_workers, test_vendor=test_vendor)
 
     max_samples = num_unsup_imgs
     niters_per_epoch = int(math.ceil(max_samples * 1.0 // batch_size))
+
     print("max_samples", max_samples)
     print("niters_per_epoch", niters_per_epoch)
 
     if config['Fourier_aug']:
         print("Fourier mode")
+    #     Fourier mode for data augmentation
     else:
         print("Normal mode")
 

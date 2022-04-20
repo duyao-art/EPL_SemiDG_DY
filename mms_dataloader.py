@@ -79,6 +79,8 @@ Labeled_mask_dir = [LabeledVendorA_mask_dir, LabeledVendorB2_mask_dir, LabeledVe
                     LabeledVendorD_mask_dir]
 
 
+# 这里会不会存在数据泄露的风险.因为在fourier tranform制作中使用了所有的label data.!!!!!!!!!!
+
 def get_meta_split_data_loaders(test_vendor='D', image_size=224, batch_size=1):
 
     random.seed(14)
@@ -228,6 +230,7 @@ def default_loader(path):
     return np.load(path)['arr_0']
 
 
+# 返回的不是一张frame,而是一个序列.
 def make_dataset(dir):
     images = []
     assert os.path.isdir(dir), '%s is not a valid directory' % dir
@@ -243,6 +246,8 @@ def fourier_augmentation(img, tar_img, mode, alpha):
     # transfer image from PIL to numpy
     img = np.array(img)
     tar_img = np.array(tar_img)
+    # the target is to add a new axis to the original data,
+    # maybe this transformation is useful for fourier transform.
     img = img[:, :, np.newaxis]
     tar_img = tar_img[:, :, np.newaxis]
 
@@ -258,9 +263,11 @@ def fourier_augmentation(img, tar_img, mode, alpha):
 
     aug_img = np.squeeze(aug_img)
     aug_img = Image.fromarray(aug_img)
+    # nn.squenze用来压缩数据的维度,将之前1维的维度直接取消掉.
 
     aug_tar_img = np.squeeze(aug_tar_img)
     aug_tar_img = Image.fromarray(aug_tar_img)
+    # 返回的image的维度,仍然是image 本身的维度
 
     return aug_img, aug_tar_img
 
@@ -287,17 +294,20 @@ class ImageFolder(data.Dataset):
         else:
             k = 1
 
-        # 对应该domain中的fold path
+        # 对应所有的dataset路径
         for num_set in range(len(data_dirs)):
             re_roots = sorted(make_dataset(reso_dir[num_set]))
             data_roots = sorted(make_dataset(data_dirs[num_set]))
             mask_roots = sorted(make_dataset(mask_dirs[num_set]))
             num_label_data = 0
             ratio = 1
-            # load each 2D image from the folder
+            # 遍历加载每个dataset路径下的所有image
             for num_data in range(len(data_roots)):
                 if labeled:
+                    # 这一步只是一个检测
                     if train:
+                        # num_label 参数传递的是每个dataset中label image的数量
+                        # n_lable则是根据参与训练的label ratio,计算出的当前的label num
                         n_label = str(math.ceil(num_label[num_set] * k + 1))
                         # 检索发现对应的labelled sample已经加载完毕，则直接break,跳出程序
                         if '00'+n_label == data_roots[num_data][-10:-7] or '0'+n_label == data_roots[num_data][-10:-7]:
@@ -310,9 +320,12 @@ class ImageFolder(data.Dataset):
                             # 每一个元素都指定相应的domain label
                             domain_labels.append(label)
                             num_label_data += 1
+                        #   累加计算这波参与的label的数量
                         else:
                             pass
                 else:
+                    # 该操作模式下不会对所有的unlabeled sample进行操作,而是采样对应的sample,
+                    # 这样参与训练的unlabeled的数量会减小
                     if default_config['ifFast']:
                         if ratio % 10 == 0:
                             temp_re.append(re_roots[num_data])
@@ -322,16 +335,18 @@ class ImageFolder(data.Dataset):
                         else:
                             ratio += 1
                     else:
+                        # if not labeled, then add all samples
                         temp_re.append(re_roots[num_data])
                         temp_imgs.append(data_roots[num_data])
                         domain_labels.append(label)
 
+        # 这里他们所参考的样本都是labeled vendorA下的样本
         for num_set in range(len(ref_dir)):
             data_roots = sorted(make_dataset(ref_dir[num_set]))
             for num_data in range(len(data_roots)):
                 tem_ref_imgs.append(data_roots[num_data])
 
-        # for Fourier dirs
+        # Fourier dirs contain all samples from all vendors with labels
         if train == True :
             for num_set in range(len(fourier_dir)):
                 data_roots = sorted(make_dataset(fourier_dir[num_set]))
@@ -339,6 +354,7 @@ class ImageFolder(data.Dataset):
                     fourier_imgs.append(data_roots[num_data])
 
         # 对应所有的本次训练加载进来的data
+        # 这里则直接给出了label或者unlabel加载后的结果,用于进一步的数据增强
         reso = temp_re
         imgs = temp_imgs
         masks = temp_masks
@@ -347,8 +363,10 @@ class ImageFolder(data.Dataset):
         print("length of imgs",len(imgs))
         print("length of masks",len(masks))
 
-        # 该domain原有的所有data
+        # 这里的ref-imgs的数量可能和当前的domain dataset不太一致
         ref_imgs = tem_ref_imgs
+
+        # 经过以上处理,得到了当前所需要的对应的dataset, 方便后续定义其他方法和对象
 
         self.reso = reso
         self.imgs = imgs
@@ -362,14 +380,17 @@ class ImageFolder(data.Dataset):
         self.Fourier_aug = default_config['Fourier_aug']
         self.fourier = fourier_imgs
         self.fourier_mode = default_config['fourier_mode']
+        # fourier transformation participation parameter, may adjust
         self.alpha = 0.3
         self.aug_p = 0.1
 
     def __getitem__(self, index):
+
         if self.train:
             index = random.randrange(len(self.imgs))
         else:
             pass
+        # 在训练过程中随机指定index,抽取label 参与训练
 
         path_re = self.reso[index]
         re = self.loader(path_re)
@@ -379,6 +400,7 @@ class ImageFolder(data.Dataset):
         img = self.loader(path_img)
         # numpy, HxW, numpy.Float64
 
+        # 取出列表中指定长度的随机数
         ref_paths = random.sample(self.ref, 1)
         ref_img = self.loader(ref_paths[0])
 
@@ -393,6 +415,7 @@ class ImageFolder(data.Dataset):
         elif label == 2:
             one_hot_label = torch.tensor([[0], [0], [1]])
         else:
+            # 没有指定label参数的情况下,则默认为是测试集
             one_hot_label = torch.tensor([[0], [0], [0]])
 
         # Intensity cropping:
@@ -417,7 +440,7 @@ class ImageFolder(data.Dataset):
             fourier_img -= fourier_img.min()
             fourier_img /= fourier_img.max()
             fourier_img = fourier_img.astype('float32')
-
+        # 随机抽取一个sample,用来对原training data进行fourier augmentation
         crop_size = 300
 
         # Augmentations:
@@ -441,21 +464,27 @@ class ImageFolder(data.Dataset):
                 img = F.rotate(img, angle, InterpolationMode.BILINEAR)
 
                 path_mask = self.masks[index]
+                # 不同于img numpy slice, mask 是一个三通道RGB图像
                 mask = Image.open(path_mask)  # numpy, HxWx3
-                # rotate, random angle between 0 - 90
                 mask = F.rotate(mask, angle, InterpolationMode.NEAREST)
 
                 # Find the region of mask
                 norm_mask = F.to_tensor(np.array(mask))
                 region = norm_mask[0] + norm_mask[1] + norm_mask[2]
+                # 对于mask,数值和image标签不可以混为一谈,数值则为label 0123,image-save
+                # 为直观表现形式
+                # 这里我只是怀疑因为实际*256的原因,下述代码并未发生作用.
                 non_zero_index = torch.nonzero(region == 1, as_tuple=False)
                 if region.sum() > 0:
+                    # 表示在这张mask有内容
                     len_m = len(non_zero_index[0])
+                    # 这里所计算的位置可能是label的中心位置
                     x_region = non_zero_index[len_m//2][0]
                     y_region = non_zero_index[len_m//2][1]
                     x_region = int(x_region.item())
                     y_region = int(y_region.item())
                 else:
+                    # 表示这是一张空白mask,里面无内容
                     x_region = norm_mask.size(-2) // 2
                     y_region = norm_mask.size(-1) // 2
 
@@ -468,6 +497,7 @@ class ImageFolder(data.Dataset):
                 top_size = 0
                 right_size = 0
                 bot_size = 0
+
                 if resize_size_h < self.new_size:
                     top_size = (self.new_size - resize_size_h) // 2
                     bot_size = (self.new_size - resize_size_h) - top_size
@@ -482,6 +512,7 @@ class ImageFolder(data.Dataset):
                 img = transform(img)
 
                 if self.Fourier_aug:
+
                     fourier_img = Image.fromarray(fourier_img)
                     fourier_img = F.rotate(fourier_img, angle, InterpolationMode.BILINEAR)
                     fourier_img = transform(fourier_img)
@@ -492,6 +523,7 @@ class ImageFolder(data.Dataset):
                     aug_img = torch.tensor([0])
 
                 # Define the crop index
+                # actually I think this part may have problems, but does not so matter.
                 if top_size >= 0:
                     top_crop = 0
                 else:
@@ -516,17 +548,20 @@ class ImageFolder(data.Dataset):
 
                 # random crop to 224x224
                 img = F.crop(img, top_crop, left_crop, self.new_size, self.new_size)
+
                 # random flip
                 hflip_p = random.random()
                 img = F.hflip(img) if hflip_p >= 0.5 else img
                 vflip_p = random.random()
                 img = F.vflip(img) if vflip_p >= 0.5 else img
                 img = F.to_tensor(np.array(img))
+
                 # Gaussian bluring:
                 transform_list = [transforms.GaussianBlur(5, sigma=(0.25, 1.25))]
                 transform = transforms.Compose(transform_list)
                 img = transform(img)
-                
+
+                # 对fourier transformation 对应的image进行同样的数据增强
                 if self.Fourier_aug:
                     aug_img = F.crop(aug_img, top_crop, left_crop, self.new_size, self.new_size)
                     aug_img = F.hflip(aug_img) if hflip_p >= 0.5 else aug_img
@@ -535,6 +570,7 @@ class ImageFolder(data.Dataset):
                     aug_img = transform(aug_img)
 
                 # resize and center-crop to 280x280
+                # 需要将image和mask放缩到一样大小,才可以代入训练.
                 transform_mask_list = [transforms.Pad(
                     (left_size, top_size, right_size, bot_size))]
                 transform_mask_list = [transforms.Resize((resize_size_h, resize_size_w),
@@ -552,11 +588,16 @@ class ImageFolder(data.Dataset):
 
                 mask = F.to_tensor(np.array(mask))
 
+                # 我猜想现在的mask由三维变为四维.
+                # 前三维为对应的三种class,最后一个维度为background信息.
                 mask_bg = (mask.sum(0) == 0).type_as(mask)  # H,W
                 mask_bg = mask_bg.reshape((1, mask_bg.size(0), mask_bg.size(1)))
                 mask = torch.cat((mask, mask_bg), dim=0)
 
             else:
+                # non-training mode
+                # 在非训练的情况下不需要进行额外的数据增强
+                # 只进行img和mask的裁剪,将其裁剪到相同的尺寸
                 path_mask = self.masks[index]
                 mask = Image.open(path_mask)  # numpy, HxWx3
                 # resize and center-crop to 280x280
@@ -565,6 +606,7 @@ class ImageFolder(data.Dataset):
                 norm_mask = F.to_tensor(np.array(mask))
                 region = norm_mask[0] + norm_mask[1] + norm_mask[2]
                 non_zero_index = torch.nonzero(region == 1, as_tuple=False)
+
                 if region.sum() > 0:
                     len_m = len(non_zero_index[0])
                     x_region = non_zero_index[len_m//2][0]
@@ -590,11 +632,11 @@ class ImageFolder(data.Dataset):
                     left_size = (self.new_size - resize_size_w) // 2
                     right_size = (self.new_size - resize_size_w) - left_size
 
-                # transform_list = [transforms.CenterCrop((crop_size, crop_size))]
                 transform_list = [transforms.Pad((left_size, top_size, right_size, bot_size))]
                 transform_list = [transforms.Resize((resize_size_h, resize_size_w))] + transform_list
                 transform_list = [transforms.ToPILImage()] + transform_list
                 transform = transforms.Compose(transform_list)
+
                 img = transform(img)
                 img = F.to_tensor(np.array(img))
 
@@ -645,6 +687,7 @@ class ImageFolder(data.Dataset):
 
         # unlabel
         else:
+
             mask = torch.tensor([0])
             img = Image.fromarray(img)
             # rotate, random angle between 0 - 90
@@ -675,8 +718,6 @@ class ImageFolder(data.Dataset):
             img = transform(img)
 
             if self.Fourier_aug:
-                # aug_p = random.random()
-                # if aug_p > self.aug_p:
                 fourier_img = Image.fromarray(fourier_img)
                 fourier_img = F.rotate(fourier_img, angle, InterpolationMode.BILINEAR)
                 fourier_img = transform(fourier_img)
@@ -709,6 +750,7 @@ class ImageFolder(data.Dataset):
                 aug_img = F.to_tensor(np.array(aug_img))
                 aug_img = transform(aug_img)
 
+        # 不管是labeled还是unlabeled,经过上述一系列数据增强之后,最终以字典的形式保存所有结果
         ouput_dict = dict(
             img=img,
             aug_img=aug_img,
@@ -737,14 +779,13 @@ if __name__ == '__main__':
     unlabel_dataset = ConcatDataset([domain_1_unlabeled_dataset, domain_2_unlabeled_dataset, domain_3_unlabeled_dataset])
     unlabel_loader = DataLoader(dataset=unlabel_dataset, batch_size=1, shuffle=False, drop_last=True, pin_memory=True)
 
-    # test_loader = DataLoader(dataset=test_dataset, batch_size=1, shuffle=False, drop_last=True, pin_memory=True)
-
+    # 这里只是想检验所做的变换是否正确,size上是否匹配.
     dataiter = iter(unlabel_loader)
     output = dataiter.next()
     img = output['img']
     aug_img = output['aug_img']
     mask = output['mask']
-    # domain_label = output['domain_label']
+    domain_label = output['domain_label']
     print("img shape",img.shape)
     print("aug_img shape",aug_img.shape)
     print("mask shape",mask.shape)

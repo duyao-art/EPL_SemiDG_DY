@@ -12,8 +12,9 @@ default_config = dict(
     model_path=name+'.pt',
     test_vendor='D',
     ratio=0.02,                   # 2%
+    # this parameter can be revised based on k-fold validation
     CPS_weight=3,
-    gpus=[0],
+    gpus=[0, 4, 5],
     ifFast=False,
     Pretrain=True,
     # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',

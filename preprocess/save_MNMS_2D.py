@@ -17,6 +17,7 @@ def safe_mkdir(path):
 def save_mask(img, path, name):
     h = img.shape[0]
     w = img.shape[1]
+    # 这里对应的标注标签中,0为背景,1,2,3 为相应的target label.
     img_1 = (img >= 0.5) * (img < 1.5) * 255
     img_2 = (img >= 1.5) * (img < 2.5) * 255
     img_3 = (img >= 2.5) * 255
