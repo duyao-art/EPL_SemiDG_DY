@@ -118,4 +118,5 @@ dependencies:
     - xlrd==2.0.1
     - yaspin==2.1.0
 #prefix: /home/duyao/my_data/duyao/anaconda3/envs/semidg
-prefix: /home/qinzhang/anaconda3/envs/semidg
+#prefix: /home/qinzhang/anaconda3/envs/semidg
+prefix: /root/miniconda3/envs/semidg

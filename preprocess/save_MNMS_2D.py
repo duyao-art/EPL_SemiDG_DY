@@ -120,7 +120,7 @@ UnlabeledVendorC_names = sorted(os.listdir(arg.UnlabeledVendorC))
 
 # Output: non-normed, non-cropped, no HW transposed npz file.
 ######################################################################################################
-# Load LabeledVendorA data and save them to 2D images
+# Load LabeledVendorA data and save them to 2D slice
 for num_pat in range(0, len(LabeledVendorA_names)):
     gz_name = sorted(os.listdir(arg.LabeledVendorA+LabeledVendorA_names[num_pat]+'/'))
     patient_root = arg.LabeledVendorA+LabeledVendorA_names[num_pat] + '/' + gz_name[0]
