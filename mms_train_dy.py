@@ -602,7 +602,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         batch_mix_masks = l
 
         logits_cons = logits_u0 * batch_mix_masks + logits_u1 * (1 - batch_mix_masks)
-        print(logits_cons.size())
+        # print(logits_cons.size())
         # guess the pseudo labels for each pixel
         # _, ps_label_1 = torch.max(logits_cons, dim=1)
         # ps_label_1 = ps_label_1.long()
@@ -613,15 +613,15 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         # add uncertainty
         var, exp_var = cal_variance(logits_cons_model, aug_logits_cons_model)
-        print(var.size())
-        print(exp_var.size())
+        # print(var.size())
+        # print(exp_var.size())
 
         # cps loss
         # cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, logits_cons)) + torch.mean(var)
         probs_u = torch.softmax(logits_cons_model, dim=1)
-        print(probs_u.size())
-        cps_loss = torch.mean(exp_var * (probs_u - logits_cons) ** 2 + torch.mean(var))
-
+        # print(probs_u.size())
+        # cps_loss = torch.mean(exp_var * ((probs_u - logits_cons) ** 2) + torch.mean(var))
+        cps_loss = torch.mean((probs_u - logits_cons) ** 2)
         # --------------------point5---------------------
 
         # 这里也是接上边一点，上下两个模型分别计算两个对应的伪标签，这个过程是完全分离的
