@@ -270,6 +270,15 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     return optimizer, ema_optimizer, step_schedule
 
 
+def linear_rampup(current, rampup_length=default_config['num_epoch']):
+    if rampup_length == 0:
+        return 1.0
+    else:
+        # np.clip将对应数组中的元素限制在参数所列出的最大最小值之间,当超出这个范围,将超出的值自动替换为对应的最大最小值.
+        current = np.clip(current / rampup_length, 0.0, 1.0)
+        return float(current)
+
+
 def cal_variance(pred, aug_pred):
 
     kl_distance = nn.KLDivLoss(reduction='none')
@@ -632,7 +641,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 还是依照mixmatch,只生成一组unlabeled data,然后对标签数据和无标签数据同步进行mixup比较好。
 
         # cps weight
-        cps_loss = cps_loss * config['CPS_weight']
+        cps_loss = cps_loss * config['CPS_weight'] * linear_rampup(epoch)
 
         # supervised loss on both models
         # 这里对原始有标签image，做监督学习对应的损失
