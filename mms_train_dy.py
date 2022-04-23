@@ -613,6 +613,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         # add uncertainty
         var, exp_var = cal_variance(logits_cons_model, aug_logits_cons_model)
+        print(var.size())
+        print(exp_var.size())
 
         # cps loss
         # cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, logits_cons)) + torch.mean(var)
