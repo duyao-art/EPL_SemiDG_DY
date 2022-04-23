@@ -582,8 +582,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             aug_logits_u1 = aug_logits_u1.detach()
 
         # the augmented data is used to calculate the average pseudo label
-        logits_u0 = (logits_u0 + aug_logits_u0) / 2
-        logits_u1 = (logits_u1 + aug_logits_u1) / 2
+        logits_u0 = torch.softmax(logits_u0, dim=1) + torch.softmax(aug_logits_u0, dim=1) / 2
+        logits_u1 = torch.softmax(logits_u1, dim=1) + torch.softmax(aug_logits_u1, dim=1) / 2
 
         pt_u0 = logits_u0 ** (1 / default_config['T'])
         logits_u0 = pt_u0 / pt_u0.sum(dim=1, keepdim=True)
@@ -616,6 +616,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # cps loss
         # cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, logits_cons)) + torch.mean(var)
         probs_u = torch.softmax(logits_cons_model, dim=1)
+
         cps_loss = torch.mean(exp_var * (probs_u - logits_cons) ** 2 + torch.mean(var))
 
         # --------------------point5---------------------
