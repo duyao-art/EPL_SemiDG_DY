@@ -263,7 +263,8 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-    step_schedule = torch.optim.lr_scheduler.StepLR(step_size=10, gamma=0.9, optimizer=optimizer)
+    # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=10, gamma=0.9, optimizer=optimizer)
+    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=10)
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
 
@@ -680,7 +681,16 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
-        # step_schedule.step()
+        step_schedule.step()
+        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+
+        # step_size = 550
+        # cycle = np.floor(1 + idx / (2 * step_size))
+        # x = np.abs(idx / step_size - 2 * cycle + 1)
+        # base_lr = 0.0001
+        # max_lr = 0.0001350 - 0.000350 * epoch / 900
+        # scale_fn = 1 / pow(2, (cycle - 1))
+        # default_config['learning_rate'] = base_lr + (max_lr - base_lr) * np.maximum(0, (1 - x)) * scale_fn
 
         # 这里是两个模型同时加载,更新,比较费资源;是否可以采用mean-teacher, 进行修改
 
