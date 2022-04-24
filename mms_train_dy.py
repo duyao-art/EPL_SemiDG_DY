@@ -611,6 +611,9 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         batch_mix_masks = l
 
         logits_cons = logits_u0 * batch_mix_masks + logits_u1 * (1 - batch_mix_masks)
+        _, ps_label = torch.max(logits_cons, dim=1)
+        ps_label = ps_label.long()
+
         # print(logits_cons.size())
         # guess the pseudo labels for each pixel
         # _, ps_label_1 = torch.max(logits_cons, dim=1)
@@ -626,12 +629,13 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # print(exp_var.size())
 
         # cps loss
-        # cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, logits_cons)) + torch.mean(var)
-        probs_u = torch.softmax(logits_cons_model, dim=1)
+        cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, ps_label)) + torch.mean(var)
+        # probs_u = torch.softmax(logits_cons_model, dim=1)
         # print(probs_u.size())
-        exp_var = exp_var.unsqueeze(1)
-        var = var.unsqueeze(1)
-        cps_loss = torch.mean(exp_var * ((probs_u - logits_cons) ** 2) + torch.mean(var))
+        # exp_var = exp_var.unsqueeze(1)
+        # var = var.unsqueeze(1)
+
+        # cps_loss = torch.mean(exp_var * ((probs_u - logits_cons) ** 2) + torch.mean(var))
         # cps_loss = torch.mean((probs_u - logits_cons) ** 2)
         # --------------------point5---------------------
 
