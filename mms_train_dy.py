@@ -680,7 +680,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
-        step_schedule.step()
+        # step_schedule.step()
 
         # 这里是两个模型同时加载,更新,比较费资源;是否可以采用mean-teacher, 进行修改
 
