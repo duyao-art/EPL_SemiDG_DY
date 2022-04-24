@@ -645,7 +645,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 还是依照mixmatch,只生成一组unlabeled data,然后对标签数据和无标签数据同步进行mixup比较好。
 
         # cps weight
-        cps_loss = cps_loss * config['CPS_weight'] * linear_rampup(epoch)
+        # cps_loss = cps_loss * config['CPS_weight'] * linear_rampup(epoch)
+        cps_loss = cps_loss * config['CPS_weight']
 
         # supervised loss on both models
         # 这里对原始有标签image，做监督学习对应的损失
