@@ -16,7 +16,7 @@ default_config = dict(
     test_vendor='D',
     ratio=0.02,                   # 2%
     # this parameter can be revised based on k-fold validation
-    CPS_weight=30,
+    CPS_weight=5,
 
     gpus=[0,1],
     ifFast=False,
