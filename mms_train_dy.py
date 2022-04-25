@@ -931,9 +931,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
 
         # Print the information.
         print(
-            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = \
-            {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  \
-            total_cps_loss = {total_cps_loss:.5f}")
+            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
 
         # ---------- Validation----------
         val_loss, val_dice, val_dice_lv, val_dice_myo, val_dice_rv = test_dual_dy(
