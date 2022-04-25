@@ -16,7 +16,7 @@ import torchvision.models as models
 from network.network import my_net
 from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot
 from mms_dataloader_dy import get_meta_split_data_loaders
-from config_dy import default_config
+from config_u2pl_dy import default_config
 from utils.dice_loss import dice_coeff
 # from losses import SupConLoss
 import utils.mask_gen as mask_gen
@@ -271,7 +271,7 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     return optimizer, ema_optimizer, step_schedule
 
 
-def linear_rampup(current, rampup_length=config['num_epoch']):
+def linear_rampup(current, rampup_length=default_config['num_epoch']):
     if rampup_length == 0:
         return 1.0
     else:
@@ -292,6 +292,27 @@ def cal_variance(pred, aug_pred):
     exp_variance = torch.exp(-variance)
 
     return variance, exp_variance
+
+
+def compute_unsupervised_loss(predict, target, percent, pred_teacher):
+    batch_size, num_class, h, w = predict.shape
+
+    with torch.no_grad():
+        # drop pixels with high entropy
+        prob = torch.softmax(pred_teacher, dim=1)
+        entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+
+        thresh = np.percentile(
+            entropy[target != 255].detach().cpu().numpy().flatten(), percent
+        )
+        thresh_mask = entropy.ge(thresh).bool() * (target != 255).bool()
+
+        target[thresh_mask] = 255
+        weight = batch_size * h * w / torch.sum(target != 255)
+
+    loss = weight * F.cross_entropy(predict, target, ignore_index=255)  # [10, 321, 321]
+
+    return loss
 
 
 def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer_r, optimizer_l, cross_criterion, epoch):
@@ -564,7 +585,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 结果要好于仅仅对unlabeled data做数据增强，这里可以在分割中尝试
         # 那这里就解释通了，对于unlabeled　data,采用了mixed的思路，同时做了数据增强
 
-        l = np.random.beta(config['alpha'], config['alpha'])
+        l = np.random.beta(default_config['alpha'], default_config['alpha'])
         l = max(l, 1-l)
         batch_mix_masks = l
 
@@ -592,14 +613,16 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             aug_logits_u1 = aug_logits_u1.detach()
 
         # the augmented data is used to calculate the average pseudo label
+        # softmax 之后的结果就是prob
+
         logits_u0 = torch.softmax(logits_u0, dim=1) + torch.softmax(aug_logits_u0, dim=1) / 2
         logits_u1 = torch.softmax(logits_u1, dim=1) + torch.softmax(aug_logits_u1, dim=1) / 2
 
-        pt_u0 = logits_u0 ** (1 / config['T'])
+        pt_u0 = logits_u0 ** (1 / default_config['T'])
         logits_u0 = pt_u0 / pt_u0.sum(dim=1, keepdim=True)
         logits_u0 = logits_u0.detach()
 
-        pt_u1 = logits_u1 ** (1 / config['T'])
+        pt_u1 = logits_u1 ** (1 / default_config['T'])
         logits_u1 = pt_u1 / pt_u1.sum(dim=1, keepdim=True)
         logits_u1 = logits_u1.detach()
 
@@ -607,7 +630,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
 
-        l = np.random.beta(config['alpha'], config['alpha'])
+        l = np.random.beta(default_config['alpha'], default_config['alpha'])
         l = max(l, 1-l)
         batch_mix_masks = l
 
@@ -628,6 +651,25 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         var, exp_var = cal_variance(logits_cons_model, aug_logits_cons_model)
         # print(var.size())
         # print(exp_var.size())
+
+        # -----------introduce unreliable data filter----------
+        drop_percent = default_config['drop_percent']
+        percent_unreliable = (100 - drop_percent) * (1 - epoch / default_config['num_epoch'])
+        drop_percent = 100 - percent_unreliable
+
+        with torch.no_grad():
+            prob = torch.softmax(logits_cons_model, dim=1)
+            entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+            thresh = np.percentile(
+                entropy[ps_label != 255].detach().cpu().numpy().flatten(), drop_percent
+            )
+            thresh_mask = entropy.ge(thresh).bool() * (ps_label != 255).bool()
+
+            ps_label[thresh_mask] = 255
+            h, w = logits_cons_model.shape
+            weight = default_config['batch_size'] * h * w / torch.sum(ps_label != 255)
+
+        loss_unsup = weight * F.cross_entropy(logits_cons_model, ps_label, ignore_index=255)
 
         # cps loss
         cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, ps_label)) + torch.mean(var)
@@ -669,7 +711,22 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # supconloss = SupConLoss()
         # con_loss = supconloss(features)
         # 这里作者并没有将对比损失的loss,加入进去,可以在这里尝试重新构造.
+
+        # adding contrastive loss item
+
         con_loss = 1
+        alpha_t = default_config['low_entropy_threshold'] * (1 - epoch / default_config['num_epoch'])
+        with torch.no_grad():
+
+            prob = torch.softmax(logits_cons_model, dim=1)
+            entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+
+            low_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), alpha_t)
+            low_entropy_mask = (entropy.le(low_thresh).float() * (ps_label != 255).bool())
+
+            high_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), 100-alpha_t)
+            high_entropy
+
 
         optimizer.zero_grad()
 
@@ -677,13 +734,13 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 这里可以认为矢量图的相加，因为每个loss项都保存了其对应的计算图。
 
         loss = loss_sup + cps_loss
-        loss = (loss-config['b']).abs() + config['b']
+        loss = (loss-default_config['b']).abs() + default_config['b']
 
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
         step_schedule.step()
-        config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
 
         # step_size = 550
         # cycle = np.floor(1 + idx / (2 * step_size))
@@ -915,6 +972,27 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
 
     best_dice = 0
 
+    # build class-wise memory bank
+    memobank = []
+    queue_ptrlis = []
+    queue_size =[]
+    for i in range(default_config['num_class']):
+        memobank.append([torch.zeros(0, 256)])
+        queue_size.append(30000)
+        queue_ptrlis.append(torch.zeros(1, dtype=torch.long))
+    queue_size[3] = 50000
+
+    # build prototype
+    prototype = torch.zeros(
+        (
+            default_config['num_class'],
+            default_config['num_queries'],
+            1,
+            256,
+        )
+    ).cuda()
+
+    # model traininig
     for epoch in range(num_epoch):
 
         # ---------- Training ----------
@@ -931,7 +1009,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
 
         # Print the information.
         print(
-            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
+            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
 
         # ---------- Validation----------
         val_loss, val_dice, val_dice_lv, val_dice_myo, val_dice_rv = test_dual_dy(
@@ -952,7 +1030,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         wandb.log({'test/test_dice': test_dice, 'test/test_dice_lv': test_dice_lv,
                   'test/test_dice_myo': test_dice_myo, 'test/test_dice_rv': test_dice_rv})
         # loss
-        wandb.log({'epoch': epoch + 1, 'learning_rate': config['learning_rate'],
+        wandb.log({'epoch': epoch + 1, 'learning_rate': default_config['learning_rate'],
                    'loss/total_loss': total_loss, 'loss/total_loss_sup': total_loss_sup,
                    'loss/total_cps_loss': total_cps_loss, 'loss/test_loss': test_loss,
                    'loss/val_loss': val_loss, 'loss/con_loss': total_con_loss})

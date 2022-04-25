@@ -1,5 +1,5 @@
 # rename the path as remote path /home/qinzhang/qinggang/EPL_SemiDG_DY/
-name = 'MMS_deeplab_2%_D_CM_DY'
+name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
     batch_size=64,
@@ -20,6 +20,13 @@ default_config = dict(
     drop_percent=80,
 
     # contrastive loss
+    negative_high_entropy=True,
+    low_rank=3,
+    high_rank=20,
+    current_class_threshold=0.3,
+    current_class_negative_threshold=1,
+    unsupervised_entropy_ingnore=80,
+    low_entropy_threshold=20,
     num_negatives=50,
     num_queries=256,
     temperature=0.5,
