@@ -29,6 +29,7 @@ torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 wandb.init(project='MNMS_SemiDG_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
+config.update(allow_val_change=True)
 
 device = get_device()
 
