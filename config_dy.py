@@ -10,6 +10,8 @@ default_config = dict(
     ema_decay=0.999,
     T=0.5,
     alpha=0.75,
+    # stop training to avoid overfitting
+    b=0.14140,
 
     train_name=name,
     model_path=name+'.pt',
