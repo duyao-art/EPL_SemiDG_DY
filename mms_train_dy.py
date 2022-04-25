@@ -29,7 +29,7 @@ torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 wandb.init(project='MNMS_SemiDG_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-config.update(allow_val_change=True)
+
 
 device = get_device()
 
@@ -225,7 +225,7 @@ class WeightEMA(object):
         self.alpha = alpha
         self.params = list(model.state_dict().values())
         self.ema_params = list(ema_model.state_dict().values())
-        self.wd = 0.02 * config['learning_rate']
+        self.wd = 0.02 * default_config['learning_rate']
 
         for param, ema_param in zip(self.params, self.ema_params):
             param.data.copy_(ema_param.data)
@@ -684,7 +684,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         optimizer.step()
         ema_optimizer.step()
         step_schedule.step()
-        config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
 
         # step_size = 550
         # cycle = np.floor(1 + idx / (2 * step_size))
@@ -932,7 +932,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
 
         # Print the information.
         print(
-            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
+            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
 
         # ---------- Validation----------
         val_loss, val_dice, val_dice_lv, val_dice_myo, val_dice_rv = test_dual_dy(
@@ -953,7 +953,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         wandb.log({'test/test_dice': test_dice, 'test/test_dice_lv': test_dice_lv,
                   'test/test_dice_myo': test_dice_myo, 'test/test_dice_rv': test_dice_rv})
         # loss
-        wandb.log({'epoch': epoch + 1, 'learning_rate': config['learning_rate'],
+        wandb.log({'epoch': epoch + 1, 'learning_rate': default_config['learning_rate'],
                    'loss/total_loss': total_loss, 'loss/total_loss_sup': total_loss_sup,
                    'loss/total_cps_loss': total_cps_loss, 'loss/test_loss': test_loss,
                    'loss/val_loss': val_loss, 'loss/con_loss': total_con_loss})
@@ -970,7 +970,7 @@ def main():
 
     batch_size = config['batch_size']
     num_workers = config['num_workers']
-    learning_rate = config['learning_rate']
+    learning_rate = default_config['learning_rate']
     weight_decay = config['weight_decay']
     ema_decay = config['ema_decay']
     num_epoch = config['num_epoch']
