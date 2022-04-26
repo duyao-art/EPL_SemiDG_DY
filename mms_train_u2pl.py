@@ -519,7 +519,7 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
 
 
 def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
-                       ema_optimizer, step_schedule, cross_criterion, epoch):
+                       ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size):
 
     # loss data
     total_loss = []
@@ -716,6 +716,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         con_loss = 1
         alpha_t = default_config['low_entropy_threshold'] * (1 - epoch / default_config['num_epoch'])
+
         with torch.no_grad():
 
             prob = torch.softmax(logits_cons_model, dim=1)
@@ -725,7 +726,11 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             low_entropy_mask = (entropy.le(low_thresh).float() * (ps_label != 255).bool())
 
             high_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), 100-alpha_t)
-            high_entropy
+            high_entropy_mask = (entropy.ge(high_thresh).float() * (ps_label != 255).bool())
+
+            low_mask_unsup = low_entropy_mask.unsqueeze(1)
+            high_mask_unsup = high_entropy_mask.unsqueeze(1)
+
 
 
         optimizer.zero_grad()
@@ -975,7 +980,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
     # build class-wise memory bank
     memobank = []
     queue_ptrlis = []
-    queue_size =[]
+    queue_size = []
     for i in range(default_config['num_class']):
         memobank.append([torch.zeros(0, 256)])
         queue_size.append(30000)
@@ -1005,7 +1010,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         # normal images
         model, total_loss, total_loss_sup, total_cps_loss, total_con_loss = train_one_epoch_dy(
             model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
-            ema_optimizer, step_schedule, cross_criterion, epoch)
+            ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
 
         # Print the information.
         print(
