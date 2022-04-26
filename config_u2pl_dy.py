@@ -21,8 +21,8 @@ default_config = dict(
 
     # contrastive loss
     negative_high_entropy=True,
-    low_rank=3,
-    high_rank=20,
+    low_rank=1,
+    high_rank=3,
     current_class_threshold=0.3,
     current_class_negative_threshold=1,
     unsupervised_entropy_ingnore=80,
