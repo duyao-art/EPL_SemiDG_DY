@@ -258,8 +258,10 @@ def ini_optimizer(model_l, model_r, learning_rate, weight_decay):
     return optimizer_l, optimizer_r
 
 
-def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
+def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay,epoch):
 
+    if epoch == 5:
+        learning_rate = learning_rate / 2
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -685,8 +687,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         ema_optimizer.step()
         step_schedule.step()
         default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
-        if epoch == 7:
-            default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
+        # if epoch == 7:
+        #     default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
 
         # step_size = 550
         # cycle = np.floor(1 + idx / (2 * step_size))
@@ -912,13 +914,13 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
     cross_criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=255)
     # square_loss = SquareLoss()
 
-    # Initialize optimizer.
-    optimizer, ema_optimizer, step_schedule = ini_optimizer_dy(
-        model, ema_model, learning_rate, weight_decay, ema_decay)
-
     best_dice = 0
 
     for epoch in range(num_epoch):
+
+        # Initialize optimizer.
+        optimizer, ema_optimizer, step_schedule = ini_optimizer_dy(
+            model, ema_model, learning_rate, weight_decay, ema_decay, epoch)
 
         # ---------- Training ----------
         model.train()
