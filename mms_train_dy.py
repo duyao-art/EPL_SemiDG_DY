@@ -685,6 +685,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         ema_optimizer.step()
         step_schedule.step()
         default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        if epoch == 7:
+            default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
 
         # step_size = 550
         # cycle = np.floor(1 + idx / (2 * step_size))
