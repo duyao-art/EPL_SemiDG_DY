@@ -14,9 +14,9 @@ import torch.distributed as dist
 import torchvision.models as models
 
 from network.network import my_net
-from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot
+from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot, dequeue_and_enqueue
 from mms_dataloader_dy import get_meta_split_data_loaders
-from config_u2pl_dy import default_config
+from config_dy import default_config
 from utils.dice_loss import dice_coeff
 # from losses import SupConLoss
 import utils.mask_gen as mask_gen
@@ -29,6 +29,7 @@ torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 wandb.init(project='MNMS_SemiDG_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
+
 
 device = get_device()
 
@@ -224,7 +225,7 @@ class WeightEMA(object):
         self.alpha = alpha
         self.params = list(model.state_dict().values())
         self.ema_params = list(ema_model.state_dict().values())
-        self.wd = 0.02 * config['learning_rate']
+        self.wd = 0.02 * default_config['learning_rate']
 
         for param, ema_param in zip(self.params, self.ema_params):
             param.data.copy_(ema_param.data)
@@ -259,6 +260,8 @@ def ini_optimizer(model_l, model_r, learning_rate, weight_decay):
 
 def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
 
+    # if epoch == 5:
+    #     learning_rate = learning_rate / 2
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)
@@ -271,7 +274,241 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     return optimizer, ema_optimizer, step_schedule
 
 
-def linear_rampup(current, rampup_length=default_config['num_epoch']):
+def compute_unsupervised_loss(predict, target, percent, pred_teacher):
+
+    # 这里percent的意义在于表明，对于通过伪标签得到的无标签数据，其中后20%的比例，认为其伪标签是不可靠的，不应该用来计算监督学习损失。
+
+    batch_size, num_class, h, w = predict.shape
+
+    with torch.no_grad():
+
+        # drop pixels with high entropy, 转化到0,1
+        # prob size: batch * num_class * h * w
+        prob = torch.softmax(pred_teacher, dim=1)
+        # 这里的entropy衡量最后是正数，所以熵小的，优质样本在前面，熵大的在后边
+        # entropy size: batch * h * w
+        entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+
+        # 提取到pixel中前80%的中位数
+        thresh = np.percentile(
+            entropy[target != 255].detach().cpu().numpy().flatten(), percent
+        )
+
+        # 经过这一步，将unreliable pixel对应的像素位置提取出来
+        thresh_mask = entropy.ge(thresh).bool() * (target != 255).bool()
+        # 所以这里255的意思就是将unreliable对应的pixel的标签赋值为255
+        # 这些pixel将不参与伪标签监督学习对应的loss
+
+        target[thresh_mask] = 255
+
+        # 这里计算的是剩下的参与监督学习的label的数量对应的百分率倒数。
+        weight = batch_size * h * w / torch.sum(target != 255)
+
+    # 有监督学习，对应的伪标签数据loss计算，将unreliable　pixel筛除出去
+    loss = weight * F.cross_entropy(predict, target, ignore_index=255)  # [10, 321, 321]
+
+    return loss
+
+
+# 攻克乃还，看看这个对比损失是如何计算出来的
+def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high_mask,memobank,queue_prtlis,
+                                 queue_size,rep_teacher,momentum_prototype=None,i_iter=0):
+
+    # 筛选anchor　pixel, 要求对应的模型预测概率大于阈值(0.3)
+    current_class_threshold = default_config['current_class_threshold']
+    current_class_negative_threshold = default_config['current_class_negative_threshold']
+    # 上下限　对pixel中相应的label 和　unlabeled pixel进行提取，进行对比学习
+    low_rank, high_rank = default_config['low_rank'], default_config['high_rank']
+    temp = default_config['temperature']
+    # 单个anchor进行对比学习需要的num_negative_sample
+    num_queries = default_config['num_queries']
+    # 每个class对应的anchor数量
+    num_negatives = default_config['num_negatives']
+    # number of feature dim
+    num_feat = rep.shape[1]
+    # batch size
+    num_labeled = label_l.shape[0]
+    # number of channel/number of class
+    num_segments = label_l.shape[1]
+
+    # 对于不稳定的无标签数据，其本身的伪label已经被赋值为255(自动屏蔽)
+    # 但是其对应的feature和prob仍然有用，可以用来指导对比学习训练
+    # 前80%的较高质量无标签pixel,已经放入有监督学习中，计算相应的交叉熵loss
+    # 对于后20%的pixel,则用于无监督对比学习。low_pixel用来计算anchor
+
+    # one-hot like label
+    low_valid_pixel = torch.cat((label_l, label_u), dim=0) * low_mask
+    high_valid_pixel = torch.cat((label_l, label_u), dim=0) * high_mask
+
+    rep = rep.permute(0, 2, 3, 1)
+    rep_teacher = rep_teacher.permute(0, 2, 3, 1)
+
+    seg_feat_all_list = []
+    seg_feat_low_entropy_list = []  # candidate anchor pixels
+    seg_num_list = []  # the number of low_valid pixels in each class
+    seg_proto_list = []  # the center of each class (positive sample)
+
+    # 通道数为１代表在class prob这个维度上进行降序; 并将降序后的通道序列表示出来
+    _, prob_indices_l = torch.sort(prob_l, 1, True)
+    prob_indices_l = prob_indices_l.permute(0, 2, 3, 1)  # (num_labeled, h, w, num_cls)
+
+    _, prob_indices_u = torch.sort(prob_u, 1, True)
+    prob_indices_u = prob_indices_u.permute(0, 2, 3, 1)  # (num_unlabeled, h, w, num_cls)
+
+    # the dim of one-hot label is the same as that of prob now
+    prob = torch.cat((prob_l, prob_u), dim=0)  # (batch_size, num_cls, h, w)
+
+    valid_classes = []
+    new_keys = []
+
+    # 按照class分别计算其对比损失
+    for i in range(num_segments):
+
+        low_valid_pixel_seg = low_valid_pixel[:, i]
+
+        high_valid_pixel_seg = high_valid_pixel[:, i]
+
+        prob_seg = prob[:, i, :, :]
+
+        rep_mask_low_entropy = (prob_seg > current_class_threshold) * low_valid_pixel_seg.bool()
+
+        rep_mask_high_entropy = (prob_seg < current_class_negative_threshold) * high_valid_pixel_seg.bool()
+
+        # extract anchor pixel features
+        seg_feat_all_list.append(rep[low_valid_pixel_seg.bool()])
+
+        seg_feat_low_entropy_list.append(rep[rep_mask_low_entropy])
+
+        # extract positive anchor features (mean of anchor features)
+        seg_proto_list.append(
+            torch.mean(
+                rep_teacher[low_valid_pixel_seg.bool()].detach(), dim=0, keepdim=True
+            )
+        )
+
+        # torch.eq()函数逐元素进行比较，若相同，则返回true;反之，为false.
+        # 将该次预测针对当前class,其对应预测概率值在low/high之间的对应像素点位置提取出来
+        class_mask_u = torch.sum(prob_indices_u[:, :, :, low_rank:high_rank].eq(i), dim=3).bool()
+
+        class_mask_l = torch.sum(prob_indices_l[:, :, :, :low_rank].eq(i), dim=3).bool()
+
+        # extract unreliable labeled and unlabeled pixels for contrastive learning
+        class_mask = torch.cat((class_mask_l * (label_l[:, i] == 0), class_mask_u), dim=0)
+
+        negative_mask = rep_mask_high_entropy * class_mask
+
+        # 当前具体参与对比学习训练的负样本(包含了有标签和无标签的数据）
+        keys = rep_teacher[negative_mask].detach()
+
+        # keys中负样本的数量(有效的负pixel的数量）
+        new_keys.append(
+            dequeue_and_enqueue(
+                keys=keys,
+                queue=memobank[i],
+                queue_ptr=queue_prtlis[i],
+                queue_size=queue_size[i],
+            )
+        )
+
+        if low_valid_pixel_seg.sum() > 0:
+            seg_num_list.append(int(low_valid_pixel_seg.sum().item()))
+            valid_classes.append(i)
+
+    # 如果说当前batch中找不到有效的anchor pixel，则这一步不计算相应的对比损失
+    if len(seg_num_list) <= 1:
+        # in some rare cases, a small mini-batch might only contain 1 or no semantic class
+        if momentum_prototype is None:
+            return new_keys, torch.tensor(0.0) * rep.sum()
+        else:
+            return momentum_prototype, new_keys, torch.tensor(0.0) * rep.sum()
+
+    else:
+        reco_loss = torch.tensor(0.0).cuda()
+
+        seg_proto = torch.cat(seg_proto_list)
+        # shape: [valid_seg, 256]
+
+        valid_seg = len(seg_num_list)
+        # number of valid classes
+
+        # 所有类的所有negative sample feature的集合大小
+        prototype = torch.zeros((prob_indices_l.shape[-1], num_queries, 1, num_feat)).cuda()
+
+        for i in range(valid_seg):
+            if (
+                len(seg_feat_low_entropy_list[i]) > 0
+                and memobank[valid_classes[i]][0].shape[0] > 0
+            ):
+                # select anchor pixel
+                # 产生对应范围的一组随机数（在这里是256维）
+                seg_low_entropy_idx = torch.randint(
+                    len(seg_feat_low_entropy_list[i]), size=(num_queries,)
+                )
+                # 从feature list中按照产生的随机数组挑选出本次batch训练的anchor
+                anchor_feat = (
+                    seg_feat_low_entropy_list[i][seg_low_entropy_idx].clone().cuda()
+                )
+            else:
+                # in some rare cases, all queries in the current query class are easy
+                reco_loss = reco_loss + 0 * rep.sum()
+                continue
+
+            # apply negative key sampling from memory bank (with no gradients)
+
+            with torch.no_grad():
+
+                negative_feat = memobank[valid_classes[i]][0].clone().cuda()
+
+                # 长度是num_anchor * num_negative　对所有的都遍历进行相应的计算
+                high_entropy_idx = torch.randint(
+                    len(negative_feat), size=(num_queries * num_negatives,)
+                )
+
+                negative_feat = negative_feat[high_entropy_idx]
+
+                negative_feat = negative_feat.reshape(
+                    num_queries, num_negatives, num_feat
+                )
+
+                positive_feat = (
+                    seg_proto[i]
+                    .unsqueeze(0)
+                    .unsqueeze(0)
+                    .repeat(num_queries, 1, 1)
+                    .cuda()
+                )  # (num_queries, 1, num_feat)
+
+                # 这里还可以对每个类对应的positive feature进行EMA更新
+                if momentum_prototype is not None:
+                    if not (momentum_prototype == 0).all():
+                        ema_decay = min(1 - 1 / i_iter, 0.999)
+                        positive_feat = (
+                            1 - ema_decay
+                        ) * positive_feat + ema_decay * momentum_prototype[
+                            valid_classes[i]
+                        ]
+
+                    prototype[valid_classes[i]] = positive_feat.clone()
+
+                all_feat = torch.cat(
+                    (positive_feat, negative_feat), dim=1
+                )  # (num_queries, 1 + num_negative, num_feat)
+
+            seg_logits = torch.cosine_similarity(
+                anchor_feat.unsqueeze(1), all_feat, dim=2
+            )
+
+            reco_loss = reco_loss + F.cross_entropy(
+                seg_logits / temp, torch.zeros(num_queries).long().cuda()
+            )
+
+        if momentum_prototype is None:
+            return new_keys, reco_loss / valid_seg
+        else:
+            return prototype, new_keys, reco_loss / valid_seg
+
+
+def linear_rampup(current, rampup_length=config['num_epoch']):
     if rampup_length == 0:
         return 1.0
     else:
@@ -304,201 +541,6 @@ def label_onehot(inputs, num_segments):
     outputs[:, inputs == 255] = 0
 
     return outputs.permute(1, 0, 2, 3)
-
-
-def compute_unsupervised_loss(predict, target, percent, pred_teacher):
-    batch_size, num_class, h, w = predict.shape
-
-    with torch.no_grad():
-        # drop pixels with high entropy
-        prob = torch.softmax(pred_teacher, dim=1)
-        entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
-
-        thresh = np.percentile(
-            entropy[target != 255].detach().cpu().numpy().flatten(), percent
-        )
-        thresh_mask = entropy.ge(thresh).bool() * (target != 255).bool()
-
-        target[thresh_mask] = 255
-        weight = batch_size * h * w / torch.sum(target != 255)
-
-    loss = weight * F.cross_entropy(predict, target, ignore_index=255)  # [10, 321, 321]
-
-    return loss
-
-
-def compute_contra_memobank_loss(rep, label_l, label_u, prob_l, prob_u, low_mask, high_mask, cfg, memobank, queue_prtlis,
-    queue_size, rep_teacher, momentum_prototype=None, i_iter=0,):
-
-    # current_class_threshold: delta_p (0.3)
-    # current_class_negative_threshold: delta_n (1)
-    current_class_threshold = default_config['current_class_threshold']
-    current_class_negative_threshold = default_config['current_class_negative_threshold']
-    low_rank, high_rank = default_config['low_rank'], default_config['high_rank']
-    temp = default_config['temperature']
-    num_queries = default_config['num_queries']
-    num_negatives = default_config['num_negatives']
-
-    num_feat = rep.shape[1]
-    num_labeled = label_l.shape[0]
-    num_segments = label_l.shape[1]
-
-    low_valid_pixel = torch.cat((label_l, label_u), dim=0) * low_mask
-    high_valid_pixel = torch.cat((label_l, label_u), dim=0) * high_mask
-
-    rep = rep.permute(0, 2, 3, 1)
-    rep_teacher = rep_teacher.permute(0, 2, 3, 1)
-
-    seg_feat_all_list = []
-    seg_feat_low_entropy_list = []  # candidate anchor pixels
-    seg_num_list = []  # the number of low_valid pixels in each class
-    seg_proto_list = []  # the center of each class
-
-    _, prob_indices_l = torch.sort(prob_l, 1, True)
-    prob_indices_l = prob_indices_l.permute(0, 2, 3, 1)  # (num_labeled, h, w, num_cls)
-
-    _, prob_indices_u = torch.sort(prob_u, 1, True)
-    prob_indices_u = prob_indices_u.permute(
-        0, 2, 3, 1
-    )  # (num_unlabeled, h, w, num_cls)
-
-    prob = torch.cat((prob_l, prob_u), dim=0)  # (batch_size, num_cls, h, w)
-
-    valid_classes = []
-    new_keys = []
-    for i in range(num_segments):
-        low_valid_pixel_seg = low_valid_pixel[:, i]  # select binary mask for i-th class
-        high_valid_pixel_seg = high_valid_pixel[:, i]
-
-        prob_seg = prob[:, i, :, :]
-        rep_mask_low_entropy = (
-            prob_seg > current_class_threshold
-        ) * low_valid_pixel_seg.bool()
-        rep_mask_high_entropy = (
-            prob_seg < current_class_negative_threshold
-        ) * high_valid_pixel_seg.bool()
-
-        seg_feat_all_list.append(rep[low_valid_pixel_seg.bool()])
-        seg_feat_low_entropy_list.append(rep[rep_mask_low_entropy])
-
-        # positive sample: center of the class
-        seg_proto_list.append(
-            torch.mean(
-                rep_teacher[low_valid_pixel_seg.bool()].detach(), dim=0, keepdim=True
-            )
-        )
-
-        # generate class mask for unlabeled data
-        # prob_i_classes = prob_indices_u[rep_mask_high_entropy[num_labeled :]]
-        class_mask_u = torch.sum(
-            prob_indices_u[:, :, :, low_rank:high_rank].eq(i), dim=3
-        ).bool()
-
-        # generate class mask for labeled data
-        # label_l_mask = rep_mask_high_entropy[: num_labeled] * (label_l[:, i] == 0)
-        # prob_i_classes = prob_indices_l[label_l_mask]
-        class_mask_l = torch.sum(prob_indices_l[:, :, :, :low_rank].eq(i), dim=3).bool()
-
-        class_mask = torch.cat(
-            (class_mask_l * (label_l[:, i] == 0), class_mask_u), dim=0
-        )
-
-        negative_mask = rep_mask_high_entropy * class_mask
-
-        keys = rep_teacher[negative_mask].detach()
-        new_keys.append(
-            dequeue_and_enqueue(
-                keys=keys,
-                queue=memobank[i],
-                queue_ptr=queue_prtlis[i],
-                queue_size=queue_size[i],
-            )
-        )
-
-        if low_valid_pixel_seg.sum() > 0:
-            seg_num_list.append(int(low_valid_pixel_seg.sum().item()))
-            valid_classes.append(i)
-
-    if (
-        len(seg_num_list) <= 1
-    ):  # in some rare cases, a small mini-batch might only contain 1 or no semantic class
-        if momentum_prototype is None:
-            return new_keys, torch.tensor(0.0) * rep.sum()
-        else:
-            return momentum_prototype, new_keys, torch.tensor(0.0) * rep.sum()
-
-    else:
-        reco_loss = torch.tensor(0.0).cuda()
-        seg_proto = torch.cat(seg_proto_list)  # shape: [valid_seg, 256]
-        valid_seg = len(seg_num_list)  # number of valid classes
-
-        prototype = torch.zeros(
-            (prob_indices_l.shape[-1], num_queries, 1, num_feat)
-        ).cuda()
-
-        for i in range(valid_seg):
-            if (
-                len(seg_feat_low_entropy_list[i]) > 0
-                and memobank[valid_classes[i]][0].shape[0] > 0
-            ):
-                # select anchor pixel
-                seg_low_entropy_idx = torch.randint(
-                    len(seg_feat_low_entropy_list[i]), size=(num_queries,)
-                )
-                anchor_feat = (
-                    seg_feat_low_entropy_list[i][seg_low_entropy_idx].clone().cuda()
-                )
-            else:
-                # in some rare cases, all queries in the current query class are easy
-                reco_loss = reco_loss + 0 * rep.sum()
-                continue
-
-            # apply negative key sampling from memory bank (with no gradients)
-            with torch.no_grad():
-                negative_feat = memobank[valid_classes[i]][0].clone().cuda()
-
-                high_entropy_idx = torch.randint(
-                    len(negative_feat), size=(num_queries * num_negatives,)
-                )
-                negative_feat = negative_feat[high_entropy_idx]
-                negative_feat = negative_feat.reshape(
-                    num_queries, num_negatives, num_feat
-                )
-                positive_feat = (
-                    seg_proto[i]
-                    .unsqueeze(0)
-                    .unsqueeze(0)
-                    .repeat(num_queries, 1, 1)
-                    .cuda()
-                )  # (num_queries, 1, num_feat)
-
-                if momentum_prototype is not None:
-                    if not (momentum_prototype == 0).all():
-                        ema_decay = min(1 - 1 / i_iter, 0.999)
-                        positive_feat = (
-                            1 - ema_decay
-                        ) * positive_feat + ema_decay * momentum_prototype[
-                            valid_classes[i]
-                        ]
-
-                    prototype[valid_classes[i]] = positive_feat.clone()
-
-                all_feat = torch.cat(
-                    (positive_feat, negative_feat), dim=1
-                )  # (num_queries, 1 + num_negative, num_feat)
-
-            seg_logits = torch.cosine_similarity(
-                anchor_feat.unsqueeze(1), all_feat, dim=2
-            )
-
-            reco_loss = reco_loss + F.cross_entropy(
-                seg_logits / temp, torch.zeros(num_queries).long().cuda()
-            )
-
-        if momentum_prototype is None:
-            return new_keys, reco_loss / valid_seg
-        else:
-            return prototype, new_keys, reco_loss / valid_seg
 
 
 def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer_r, optimizer_l, cross_criterion, epoch):
@@ -707,14 +749,13 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
 def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
                        ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size):
 
+    global prototype
+
     # loss data
     total_loss = []
     total_loss_sup = []
-    total_cps_loss = []
+    total_unsup_loss = []
     total_con_loss = []
-
-    # prototype的size为class,256,1,256.
-    global prototype
 
     # tqdm
     bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
@@ -722,16 +763,12 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
                 file=sys.stdout, bar_format=bar_format)
 
     # 每个batch进行更新
+
     for idx in pbar:
 
         minibatch = label_dataloader.next()
         unsup_minibatch_0 = unlabel_dataloader_0.next()
         unsup_minibatch_1 = unlabel_dataloader_1.next()
-
-        # Multiple dictionary in self-defined Dataset
-        # 自定义的dataset,返回的值是一个字典，从原始数据到增强的数据。
-
-        # --------------------point7 --------------------
 
         # 这里的fourier augmentation已经是一个非常强的变换了
         # 可以考虑在第二次实验中，是否对label，unlabel统一做一次mixup,而不是只针对unlabeled data.
@@ -774,19 +811,13 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 结果要好于仅仅对unlabeled data做数据增强，这里可以在分割中尝试
         # 那这里就解释通了，对于unlabeled　data,采用了mixed的思路，同时做了数据增强
 
-        l = np.random.beta(default_config['alpha'], default_config['alpha'])
+        l = np.random.beta(config['alpha'], config['alpha'])
         l = max(l, 1-l)
         batch_mix_masks = l
 
         unsup_imgs_mixed = unsup_imgs_0 * batch_mix_masks + unsup_imgs_1 * (1 - batch_mix_masks)
         # unlabeled r mixed images
         aug_unsup_imgs_mixed = aug_unsup_imgs_0 * batch_mix_masks + aug_unsup_imgs_1 * (1 - batch_mix_masks)
-
-        img_all = torch.cat((imgs, unsup_imgs_mixed))
-        pred_all, rep_all = model(img_all)
-
-        with torch.no_grad():
-            pred_all_t, rep_all_t = model(img_all)
 
         # add uncertainty
         # this step is to generate pseudo labels
@@ -807,20 +838,15 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             aug_logits_u0 = aug_logits_u0.detach()
             aug_logits_u1 = aug_logits_u1.detach()
 
-            prob, _ = model(imgs)
-            prob = prob.detach()
-
         # the augmented data is used to calculate the average pseudo label
-        # softmax 之后的结果就是prob
-
         logits_u0 = torch.softmax(logits_u0, dim=1) + torch.softmax(aug_logits_u0, dim=1) / 2
         logits_u1 = torch.softmax(logits_u1, dim=1) + torch.softmax(aug_logits_u1, dim=1) / 2
 
-        pt_u0 = logits_u0 ** (1 / default_config['T'])
+        pt_u0 = logits_u0 ** (1 / config['T'])
         logits_u0 = pt_u0 / pt_u0.sum(dim=1, keepdim=True)
         logits_u0 = logits_u0.detach()
 
-        pt_u1 = logits_u1 ** (1 / default_config['T'])
+        pt_u1 = logits_u1 ** (1 / config['T'])
         logits_u1 = pt_u1 / pt_u1.sum(dim=1, keepdim=True)
         logits_u1 = logits_u1.detach()
 
@@ -828,7 +854,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
 
-        l = np.random.beta(default_config['alpha'], default_config['alpha'])
+        l = np.random.beta(config['alpha'], config['alpha'])
         l = max(l, 1-l)
         batch_mix_masks = l
 
@@ -836,45 +862,104 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         _, ps_label = torch.max(logits_cons, dim=1)
         ps_label = ps_label.long()
 
+        # --------------------------------------------------
+
+        num_labeled = len(imgs)
+
+        image_all = torch.cat((imgs, unsup_imgs_mixed))
+        pred_all, rep_all = model(image_all)
+        pred_l, pred_u = pred_all[:num_labeled], pred_all[num_labeled:]
+
+        # ----------supervised loss on both models----------
+
+        sof = F.softmax(pred_l, dim=1)
+        loss_sup = total_dice_loss(sof, mask)
+
+        # ---------unlabeled loss---------
+
+        with torch.no_grad():
+
+            pred_all_t, rep_all_t = model(image_all)
+            prob_all_t = F.softmax(prob_all_t, dim=1)
+            prob_l_t, prob_u_t = (prob_all_t[:num_labeled], prob_all_t[num_labeled:])
+            pred_u_t = pred_all_t[num_labeled:]
+
+        # ----------supervised loss for unlabeled sample with low-entropy pseudo label----------
+
+        drop_percent = default_config['drop_percent']
+        percent_unreliable = (100 - drop_percent) * (1 - epoch / default_config['num_epoch'])
+        drop_percent = 100 - percent_unreliable
+
+        unsup_loss = compute_unsupervised_loss(pred_u, ps_label.clone(), drop_percent, pred_u_t.detach())
+
+        # -----------contrastive loss using unreliable pixels----------
+
+        low_rank, high_rank = default_config['low_rank'], default_config['high_rank']
+        alpha_t = default_config['low_entropy_threshold'] * (1 - epoch / default_config['num_epoch'])
+
+        with torch.no_grad():
+
+            prob = torch.softmax(pred_u_t, dim=1)
+            entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
+
+            low_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), alpha_t)
+            low_entropy_mask = (entropy.le(low_thresh).float() * (ps_label != 255).bool())
+
+            high_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), 100-alpha_t)
+            high_entropy_mask = (entropy.ge(high_thresh).float() * (ps_label != 255).bool())
+
+            low_mask_all = torch.cat(
+                (
+                    (mask.unsqueeze(1) != 255).float(),
+                    low_entropy_mask.unsqueeze(1)
+                )
+            )
+
+            high_mask_all = torch.cat(
+                (
+                    (mask.unsqueeze(1) != 255).float(),
+                    high_entropy_mask.unsqueeze(1)
+                )
+            )
+
+            label_l = label_onehot(mask, default_config['num_class'])
+            label_u = label_onehot(ps_label, default_config['num_class'])
+
+            prototype, new_keys, contra_loss = compute_contra_memobank_loss(
+                rep_all,
+                label_l.long(),
+                label_u.long(),
+                prob_l_t.detach(),
+                prob_u_t.detach(),
+                low_mask_all,
+                high_mask_all,
+                memobank,
+                queue_ptrlis,
+                queue_size,
+                rep_all_t.detach(),
+                prototype
+            )
+
+        loss = loss_sup + unsup_loss + contra_loss
+
+        loss = (loss-config['b']).abs() + config['b']
+
         # print(logits_cons.size())
         # guess the pseudo labels for each pixel
         # _, ps_label_1 = torch.max(logits_cons, dim=1)
         # ps_label_1 = ps_label_1.long()
 
         # Get student_l prediction for mixed image
-        logits_cons_model, _ = model(unsup_imgs_mixed)
-        aug_logits_cons_model, _ = model(aug_unsup_imgs_mixed)
+        # logits_cons_model, _ = model(unsup_imgs_mixed)
+        # aug_logits_cons_model, _ = model(aug_unsup_imgs_mixed)
 
         # add uncertainty
-        var, exp_var = cal_variance(logits_cons_model, aug_logits_cons_model)
+        # var, exp_var = cal_variance(logits_cons_model, aug_logits_cons_model)
         # print(var.size())
         # print(exp_var.size())
 
-        # -----------introduce unreliable data filter----------
-
-        drop_percent = default_config['drop_percent']
-        percent_unreliable = (100 - drop_percent) * (1 - epoch / default_config['num_epoch'])
-        drop_percent = 100 - percent_unreliable
-
-        # calculate the reliable unlabeled data loss with pseudo labels
-
-        with torch.no_grad():
-
-            prob = torch.softmax(logits_cons_model, dim=1)
-            entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
-            thresh = np.percentile(
-                entropy[ps_label != 255].detach().cpu().numpy().flatten(), drop_percent
-            )
-            thresh_mask = entropy.ge(thresh).bool() * (ps_label != 255).bool()
-
-            ps_label[thresh_mask] = 255
-            batch_size, num_class, h, w = logits_cons_model.shape
-            weight = batch_size * h * w / torch.sum(ps_label != 255)
-
-        loss_unsup = weight * F.cross_entropy(logits_cons_model, ps_label, ignore_index=255)
-
         # cps loss
-        cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, ps_label)) + torch.mean(var)
+        # cps_loss = torch.mean(exp_var * cross_criterion(logits_cons_model, ps_label)) + torch.mean(var)
         # probs_u = torch.softmax(logits_cons_model, dim=1)
         # print(probs_u.size())
         # exp_var = exp_var.unsqueeze(1)
@@ -891,15 +976,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         # cps weight
         # cps_loss = cps_loss * config['CPS_weight'] * linear_rampup(epoch)
-        cps_loss = cps_loss * config['CPS_weight']
-
-        # supervised loss on both models
-        # 这里对原始有标签image，做监督学习对应的损失
-        pre_sup, feature = model(imgs)
-
-        # dice loss
-        sof = F.softmax(pre_sup, dim=1)
-        loss_sup = total_dice_loss(sof, mask)
+        # cps_loss = cps_loss * config['CPS_weight']
 
         # --------------------------point 6-------------------------
 
@@ -913,72 +990,20 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # supconloss = SupConLoss()
         # con_loss = supconloss(features)
         # 这里作者并没有将对比损失的loss,加入进去,可以在这里尝试重新构造.
-
-        # adding contrastive loss item
-
-        con_loss = 1
-
-        alpha_t = default_config['low_entropy_threshold'] * (1 - epoch / default_config['num_epoch'])
-
-        with torch.no_grad():
-
-            prob = torch.softmax(logits_cons_model, dim=1)
-            entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1)
-
-            low_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), alpha_t)
-            low_entropy_mask = (entropy.le(low_thresh).float() * (ps_label != 255).bool())
-
-            high_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), 100-alpha_t)
-            high_entropy_mask = (entropy.ge(high_thresh).float() * (ps_label != 255).bool())
-
-            low_mask_all = torch.cat(
-                (
-                    (mask.unsqueeze(1) != 255).float(),
-                    low_entropy_mask.unsqueeze(1),
-                )
-            )
-
-            high_mask_all = torch.cat(
-                (
-                    (mask.unsqueeze(1) != 255).float(),
-                    high_entropy_mask.unsqueeze(1),
-                )
-            )
-
-            mask = label_onehot(mask, default_config['num_class'])
-            ps_label = label_onehot(ps_label, default_config['num_class'])
-
-        prototype, new_keys, contra_loss = compute_contra_memobank_loss(
-            rep_all,
-            mask.long(),
-            ps_label.long(),
-            prob.detach(),
-            logits_cons.detach(),
-            low_mask_all,
-            high_mask_all,
-            memobank,
-            queue_ptrlis,
-            queue_size,
-            rep_all_t.detach(),
-            prototype
-        )
-
-        contra_loss = contra_loss * "loss_weight"
-        loss = loss_sup + loss_unsup + contra_loss
-
-        optimizer.zero_grad()
+        # con_loss = 1
 
         # 这里因为使用了两个网络，所以将两个loss都加进去。
         # 这里可以认为矢量图的相加，因为每个loss项都保存了其对应的计算图。
 
-        # loss = loss_sup + cps_loss
-        # loss = (loss-default_config['b']).abs() + default_config['b']
-
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
         step_schedule.step()
         default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+
+        # if epoch == 7:
+        #     default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
 
         # step_size = 550
         # cycle = np.floor(1 + idx / (2 * step_size))
@@ -992,15 +1017,15 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         total_loss.append(loss.item())
         total_loss_sup.append(loss_sup.item())
-        total_cps_loss.append(cps_loss.item())
-        total_con_loss.append(con_loss)
+        total_unsup_loss.append(unsup_loss.item())
+        total_con_loss.append(contra_loss.item())
 
     total_loss = sum(total_loss) / len(total_loss)
     total_loss_sup = sum(total_loss_sup) / len(total_loss_sup)
-    total_cps_loss = sum(total_cps_loss) / len(total_cps_loss)
+    total_unsup_loss = sum(total_unsup_loss) / len(total_unsup_loss)
     total_con_loss = sum(total_con_loss) / len(total_con_loss)
 
-    return model, total_loss, total_loss_sup, total_cps_loss, total_con_loss
+    return model, total_loss, total_loss_sup, total_unsup_loss, total_con_loss, default_config['learning_rate']
 
 
 # use the function to calculate the valid loss or test loss
@@ -1202,40 +1227,38 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
     # Initialize model
     model, ema_model = ini_model_dy()
 
-    # loss
-    cross_criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=255)
-    # square_loss = SquareLoss()
-
     # Initialize optimizer.
     optimizer, ema_optimizer, step_schedule = ini_optimizer_dy(
         model, ema_model, learning_rate, weight_decay, ema_decay)
 
+    # loss
+    cross_criterion = nn.CrossEntropyLoss(reduction='mean', ignore_index=255)
+    # square_loss = SquareLoss()
+
     best_dice = 0
 
-    # build class-wise memory bank
+    # build class_wise memory bank
     memobank = []
     queue_ptrlis = []
     queue_size = []
     for i in range(default_config['num_class']):
-        memobank.append([torch.zeros(0, 256)])
+        memobank.append([torch.zeros(0,256)])
         queue_size.append(30000)
         queue_ptrlis.append(torch.zeros(1, dtype=torch.long))
     queue_size[3] = 50000
 
-    # build prototype
     prototype = torch.zeros(
-        (
-            default_config['num_class'],
-            default_config['num_queries'],
-            1,
-            256,
-        )
+        default_config['num_class'],
+        default_config['num_queries'],
+        1,
+        # -----------dim of feature----------
+        256,
     ).cuda()
 
-    # model traininig
     for epoch in range(num_epoch):
 
         # ---------- Training ----------
+
         model.train()
 
         label_dataloader = iter(label_loader)
@@ -1243,9 +1266,9 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         unlabel_dataloader_1 = iter(unlabel_loader_1)
 
         # normal images
-        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss = train_one_epoch_dy(
-            model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
-            ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
+        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss, default_config['learning_rate'] = \
+            train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
+                               optimizer, ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
 
         # Print the information.
         print(
@@ -1287,7 +1310,7 @@ def main():
 
     batch_size = config['batch_size']
     num_workers = config['num_workers']
-    learning_rate = config['learning_rate']
+    learning_rate = default_config['learning_rate']
     weight_decay = config['weight_decay']
     ema_decay = config['ema_decay']
     num_epoch = config['num_epoch']

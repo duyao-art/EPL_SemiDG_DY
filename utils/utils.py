@@ -5,10 +5,46 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import numpy as np
 from utils.dice_loss import dice_coeff
+import torch.distributed as dist
 
-#check device
+
+@torch.no_grad()
+def gather_together(data):
+    dist.barrier()
+
+    world_size = dist.get_world_size()
+    gather_data = [None for _ in range(world_size)]
+    dist.all_gather_object(gather_data, data)
+
+    return gather_data
+
+
+@torch.no_grad()
+def dequeue_and_enqueue(keys, queue, queue_ptr, queue_size):
+    # gather keys before updating queue
+    keys = keys.detach().clone().cpu()
+    gathered_list = gather_together(keys)
+    keys = torch.cat(gathered_list, dim=0).cuda()
+
+    batch_size = keys.shape[0]
+
+    ptr = int(queue_ptr)
+
+    queue[0] = torch.cat((queue[0], keys.cpu()), dim=0)
+    if queue[0].shape[0] >= queue_size:
+        queue[0] = queue[0][-queue_size:, :]
+        ptr = queue_size
+    else:
+        ptr = (ptr + batch_size) % queue_size  # move pointer
+
+    queue_ptr[0] = ptr
+
+    return batch_size
+
+
 def get_device():
     return 'cuda' if torch.cuda.is_available() else 'cpu'
+
 
 def im_convert(tensor, ifimg):
     """ 展示数据"""
@@ -18,6 +54,7 @@ def im_convert(tensor, ifimg):
         image = image.transpose(1,2,0)
     return image
 
+
 def get_one_hot(label, N, device='cuda'):
     size = list(label.size())
     label = label.view(-1)   # reshape 为向量
@@ -26,11 +63,13 @@ def get_one_hot(label, N, device='cuda'):
     size.append(N)  # 把类别输目添到size的尾后，准备reshape回原来的尺寸
     return ones.view(*size)
 
+
 def label_to_onehot(label, num_classes = 4):
     # one_hot = torch.nn.functional.one_hot(label, num_classes).float() # size=(b,h,w,n)
     one_hot = get_one_hot(label, num_classes)
     one_hot = one_hot.permute(0, 3, 1, 2) # size(b,n,h,w)
     return one_hot
+
 
 def find_max_region(mask_sel):
     __, contours,hierarchy = cv2.findContours(mask_sel,cv2.RETR_TREE, v2.CHAIN_APPROX_NONE)
@@ -84,6 +123,7 @@ def find_max_region(mask_sel):
     #     return 1 - dice
     #     # return 1 - 2. * intersect / denominator
 
+
 def dice_loss(pred, target):
     """
     This definition generalize to real valued pred and target vector.
@@ -104,6 +144,7 @@ def dice_loss(pred, target):
             (iflat.sum() + tflat.sum() + smooth)).mean()
 
     return 1 - loss
+
 
 def check_accuracy(loader, model, device="cuda"):
     model.eval()
@@ -136,6 +177,7 @@ def check_accuracy(loader, model, device="cuda"):
     dice = tot/len(loader)
     model.train()
     return dice, dice_lv, dice_myo, dice_rv
+
 
 def check_accuracy_dual(loader, model_r, model_l, device="cuda"):
     model_r.eval()

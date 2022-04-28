@@ -4,14 +4,15 @@ name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 default_config = dict(
     batch_size=64,
     num_epoch=50,
-    learning_rate=1e-4,            # learning rate of Adam
-    weight_decay=0.01,             # weight decay 
+    learning_rate=5e-5,            # learning rate of Adam
+    learning_rate_after=5e-5,
+    weight_decay=0.01,             # weight decay
     num_workers=8,
     ema_decay=0.999,
     T=0.5,
     alpha=0.75,
     # stop training to avoid overfitting
-    b=0.1600,
+    b=0.230,
     num_class=4,
 
     # unsupervised
@@ -25,7 +26,7 @@ default_config = dict(
     high_rank=3,
     current_class_threshold=0.3,
     current_class_negative_threshold=1,
-    unsupervised_entropy_ingnore=80,
+    unsupervised_entropy_ignore=80,
     low_entropy_threshold=20,
     num_negatives=50,
     num_queries=256,
