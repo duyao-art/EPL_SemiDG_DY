@@ -10,6 +10,7 @@ import torch.distributed as dist
 
 @torch.no_grad()
 def gather_together(data):
+
     dist.barrier()
 
     world_size = dist.get_world_size()

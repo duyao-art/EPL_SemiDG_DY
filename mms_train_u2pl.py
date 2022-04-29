@@ -27,7 +27,7 @@ from utils.custom_collate import SegCollate
 gpus = default_config['gpus']
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
+wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao-u2pl',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
 
@@ -288,6 +288,7 @@ def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high
     num_negatives = default_config['num_negatives']
     # number of feature dim
     num_feat = rep.shape[1]
+    # print(num_feat)
     # batch size
     num_labeled = label_l.shape[0]
     # number of channel/number of class
@@ -302,7 +303,7 @@ def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high
     low_valid_pixel = torch.cat((label_l, label_u), dim=0) * low_mask
     high_valid_pixel = torch.cat((label_l, label_u), dim=0) * high_mask
 
-    print(rep.size())
+    # print(rep.size())
     rep = rep.permute(0, 2, 3, 1)
     rep_teacher = rep_teacher.permute(0, 2, 3, 1)
 
@@ -631,6 +632,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         image_all = torch.cat((imgs, unsup_imgs_mixed))
         pred_all, rep_all = model(image_all)
+        # print(rep_all.size())
         pred_l, pred_u = pred_all[:num_labeled], pred_all[num_labeled:]
 
         # ----------supervised loss on both models----------

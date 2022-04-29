@@ -1,5 +1,4 @@
 # encoding: utf-8
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -7,13 +6,13 @@ import torch.nn.functional as F
 from functools import partial
 from network.resnet import resnet50, resnet18
 from network.conv_2_5d import Conv2_5D_depth, Conv2_5D_disp
-
 import sys 
 sys.path.append("..") 
 from config import default_config
 
 # Specify the graphics card
 # torch.cuda.set_device(7)
+
 
 class Normalize(nn.Module):
     def __init__(self, power=2):
@@ -24,6 +23,7 @@ class Normalize(nn.Module):
         norm = x.pow(self.power).sum(1, keepdim=True).pow(1. / self.power)
         out = x.div(norm)
         return out
+
 
 class SingleNetwork(nn.Module):
     def __init__(self, num_classes, criterion, norm_layer, in_channels=1, pretrained_model=None):
@@ -71,7 +71,11 @@ class SingleNetwork(nn.Module):
         global_feature = torch.flatten(global_feature, 1)
         global_feature = self.l2norm(global_feature)
 
-        return pred, global_feature
+        # return pred, global_feature
+        rep = F.interpolate(v3plus_feature, size=(h, w), mode="bilinear", align_corners=True)
+        # print(rep.size())
+        # return pred, v3plus_feature
+        return pred, rep
 
     # @staticmethod
     def _nostride_dilate(self, m, dilate):
@@ -86,6 +90,7 @@ class SingleNetwork(nn.Module):
                 if m.kernel_size == (3, 3):
                     m.dilation = (dilate, dilate)
                     m.padding = (dilate, dilate)
+
 
 class ASPP(nn.Module):
     def __init__(self,
@@ -159,6 +164,7 @@ class ASPP(nn.Module):
             pool = nn.functional.pad(pool, pad=padding, mode="replicate")
         return pool
 
+
 class Head(nn.Module):
     def __init__(self, classify_classes, norm_act=nn.BatchNorm2d, bn_momentum=0.0003):
         super(Head, self).__init__()
@@ -194,6 +200,7 @@ class Head(nn.Module):
 
         return f
 
+
 def __init_weight(feature, conv_init, norm_layer, bn_eps, bn_momentum,
                   **kwargs):
     for name, m in feature.named_modules():
@@ -213,6 +220,7 @@ def __init_weight(feature, conv_init, norm_layer, bn_eps, bn_momentum,
             nn.init.constant_(m.weight, 1)
             nn.init.constant_(m.bias, 0)
 
+
 def init_weight(module_list, conv_init, norm_layer, bn_eps, bn_momentum,
                 **kwargs):
     if isinstance(module_list, list):
@@ -222,6 +230,7 @@ def init_weight(module_list, conv_init, norm_layer, bn_eps, bn_momentum,
     else:
         __init_weight(module_list, conv_init, norm_layer, bn_eps, bn_momentum,
                       **kwargs)
+
 
 if __name__ == '__main__':
     # pretrained_model = '/home/listu/code/semi_medical/MNMS_seg/pretrain_res/resnet50_v1c.pth'
