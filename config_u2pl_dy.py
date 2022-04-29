@@ -2,7 +2,7 @@
 name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
-    batch_size=64,
+    batch_size=4,
     num_epoch=50,
     learning_rate=5e-5,            # learning rate of Adam
     learning_rate_after=5e-5,
@@ -39,11 +39,12 @@ default_config = dict(
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
 
-    gpus=[0,1],
+    # gpus=[0,1],
+    gpus=[0],
     ifFast=False,
     Pretrain=True,
-    # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
-    pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
+    pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
+    # pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
 
     restore=False,
     restore_from=name+'.pt',
