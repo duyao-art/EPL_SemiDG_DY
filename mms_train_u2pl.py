@@ -302,6 +302,7 @@ def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high
     low_valid_pixel = torch.cat((label_l, label_u), dim=0) * low_mask
     high_valid_pixel = torch.cat((label_l, label_u), dim=0) * high_mask
 
+    print(rep.size())
     rep = rep.permute(0, 2, 3, 1)
     rep_teacher = rep_teacher.permute(0, 2, 3, 1)
 
@@ -471,6 +472,7 @@ def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high
 
 
 def linear_rampup(current, rampup_length=config['num_epoch']):
+
     if rampup_length == 0:
         return 1.0
     else:
@@ -494,6 +496,7 @@ def cal_variance(pred, aug_pred):
 
 
 def label_onehot(inputs, num_segments):
+
     batch_size, im_h, im_w = inputs.shape
     outputs = torch.zeros((num_segments, batch_size, im_h, im_w)).cuda()
 
@@ -535,6 +538,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         imgs = minibatch['img']
         aug_imgs = minibatch['aug_img']
         mask = minibatch['mask']
+        # print(mask[0][2])
 
         unsup_imgs_0 = unsup_minibatch_0['img']
         unsup_imgs_1 = unsup_minibatch_1['img']
@@ -667,21 +671,48 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             high_thresh = np.percentile(entropy[ps_label != 255].cpu().numpy().flatten(), 100-alpha_t)
             high_entropy_mask = (entropy.ge(high_thresh).float() * (ps_label != 255).bool())
 
+            # print(mask.size())
+            # print(low_entropy_mask.size())
+
+            # print((mask != 255).size())
+            # print((mask.unsqueeze(1) != 255).size())
+            # print((mask != 255).size())
+            # print(low_entropy_mask.unsqueeze(1).size())
+            # print(low_entropy_mask)
+
+            # low_mask_all = torch.cat(
+            #     (
+            #         (mask.unsqueeze(1) != 255).float(),
+            #         low_entropy_mask.unsqueeze(1),
+            #     )
+            # )
+            #
+            # high_mask_all = torch.cat(
+            #     (
+            #         (mask.unsqueeze(1) != 255).float(),
+            #         high_entropy_mask.unsqueeze(1),
+            #     )
+            # )
+
+            class_indice = torch.max(mask, 1)[0]
+            # print(class_indice.size())
+
             low_mask_all = torch.cat(
                 (
-                    (mask.unsqueeze(1) != 255).float(),
-                    low_entropy_mask.unsqueeze(1)
+                    (class_indice.unsqueeze(1) != 255).float(),
+                    low_entropy_mask.unsqueeze(1),
                 )
             )
 
             high_mask_all = torch.cat(
                 (
-                    (mask.unsqueeze(1) != 255).float(),
-                    high_entropy_mask.unsqueeze(1)
+                    (class_indice.unsqueeze(1) != 255).float(),
+                    high_entropy_mask.unsqueeze(1),
                 )
             )
 
-            label_l = label_onehot(mask, default_config['num_class'])
+            # label_l = label_onehot(mask, default_config['num_class'])
+            label_l = label_onehot(class_indice, default_config['num_class'])
             label_u = label_onehot(ps_label, default_config['num_class'])
 
             prototype, new_keys, contra_loss = compute_contra_memobank_loss(

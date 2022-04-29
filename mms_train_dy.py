@@ -230,7 +230,7 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
 
     # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=10, gamma=0.9, optimizer=optimizer)
     # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=10)
-    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=10, T_mult=4)
+    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=6, T_mult=7)
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
 
