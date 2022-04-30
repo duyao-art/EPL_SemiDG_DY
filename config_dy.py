@@ -4,15 +4,15 @@ name = 'MMS_deeplab_2%_D_CM_DY'
 default_config = dict(
     batch_size=64,
     num_epoch=50,
-    learning_rate=5e-5,            # learning rate of Adam
-    learning_rate_after=5e-5,
+    learning_rate=1e-4,            # learning rate of Adam
+    learning_rate_after=1e-4,
     weight_decay=0.01,             # weight decay 
     num_workers=8,
     ema_decay=0.999,
     T=0.5,
     alpha=0.75,
     # stop training to avoid overfitting
-    b=0.210,
+    b=0.165,
     num_class=4,
 
     # unsupervised
