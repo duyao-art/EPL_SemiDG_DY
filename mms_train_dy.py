@@ -230,7 +230,7 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
 
     # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=10, gamma=0.9, optimizer=optimizer)
     # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=10)
-    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=10)
+    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=3, T_mult=15)
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
 
@@ -410,6 +410,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         # cps weight
         # cps_loss = cps_loss * config['CPS_weight'] * linear_rampup(epoch)
+
+        # -------这个loss的权重是不是太小了，导致无标签数据对应的损失在更新中所占的比例太小。　
         cps_loss = cps_loss * config['CPS_weight']
 
         # supervised loss on both models

@@ -12,7 +12,7 @@ default_config = dict(
     T=0.5,
     alpha=0.75,
     # stop training to avoid overfitting
-    b=0.165,
+    b=0.19682,
     num_class=4,
 
     # unsupervised
