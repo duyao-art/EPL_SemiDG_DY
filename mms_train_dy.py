@@ -226,8 +226,8 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     #     learning_rate = learning_rate / 2
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    step_schedule = torch.optim.lr_scheduler.StepLR(step_size=5, gamma=0.9, optimizer=optimizer)
-    # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=3, T_mult=15)
+    # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=5, gamma=0.9, optimizer=optimizer)
+    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=3, T_mult=15)
     # 问题出在哪里呢？
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
