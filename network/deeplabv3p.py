@@ -8,7 +8,7 @@ from network.resnet import resnet50, resnet18
 from network.conv_2_5d import Conv2_5D_depth, Conv2_5D_disp
 import sys 
 sys.path.append("..") 
-from config import default_config
+from config_dy import default_config
 
 # Specify the graphics card
 # torch.cuda.set_device(7)

@@ -227,7 +227,8 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=5, gamma=0.9, optimizer=optimizer)
-    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=1)
+    # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=1)
+    step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [5, 10, 15, 25], gamma=0.5, last_epoch=-1)
     # 问题出在哪里呢？
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
@@ -445,8 +446,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
-        step_schedule.step()
-        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        # step_schedule.step()
+        # default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
         # if epoch == 7:
         #     default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
 
@@ -470,7 +471,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
     total_cps_loss = sum(total_cps_loss) / len(total_cps_loss)
     total_con_loss = sum(total_con_loss) / len(total_con_loss)
 
-    return model, total_loss, total_loss_sup, total_cps_loss, total_con_loss, default_config['learning_rate']
+    return model, total_loss, total_loss_sup, total_cps_loss, total_con_loss
 
 
 # use the function to calculate the valid loss or test loss
@@ -560,9 +561,12 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         unlabel_dataloader_1 = iter(unlabel_loader_1)
 
         # normal images
-        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss, default_config['learning_rate'] = \
+        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss = \
             train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
                                optimizer, ema_optimizer, step_schedule, cross_criterion, epoch)
+
+        step_schedule.step()
+        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
 
         # Print the information.
         print(
