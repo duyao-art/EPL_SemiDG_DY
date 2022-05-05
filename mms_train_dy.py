@@ -230,7 +230,7 @@ def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
     # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=1)
 
     # step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [5, 10, 15, 25], gamma=0.5, last_epoch=-1)
-    step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [8, 16, 24, 48], gamma=0.3, last_epoch=-1)
+    step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [10, 15, 20, 30], gamma=0.3, last_epoch=-1)
     # 问题出在哪里呢？
 
     ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
