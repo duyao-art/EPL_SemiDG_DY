@@ -5,7 +5,6 @@ default_config = dict(
     batch_size=64,
     num_epoch=50,
     learning_rate=1e-4,            # learning rate of Adam
-    learning_rate_after=1e-4,
     weight_decay=0.01,             # weight decay 
     num_workers=8,
     ema_decay=0.999,

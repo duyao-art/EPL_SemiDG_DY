@@ -73,7 +73,8 @@ class SingleNetwork(nn.Module):
 
         # return pred, global_feature
         rep = F.interpolate(v3plus_feature, size=(h, w), mode="bilinear", align_corners=True)
-        # print(rep.size())
+        # print(rep.size()) batch-size 256 288 288
+        # print(pred.size()) batch-size 4 288 288
         # return pred, v3plus_feature
         return pred, rep
 

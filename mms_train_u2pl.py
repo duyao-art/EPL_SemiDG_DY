@@ -22,12 +22,14 @@ from utils.dice_loss import dice_coeff
 # from losses import SupConLoss
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
+import torch.distributed as dist
+dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
 
 # multiple GPU setting
 gpus = default_config['gpus']
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao-u2pl',
+wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
 
@@ -529,6 +531,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
     for idx in pbar:
 
+        i_iter = epoch * len(label_dataloader) + idx
         minibatch = label_dataloader.next()
         unsup_minibatch_0 = unlabel_dataloader_0.next()
         unsup_minibatch_1 = unlabel_dataloader_1.next()
@@ -729,7 +732,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
                 queue_ptrlis,
                 queue_size,
                 rep_all_t.detach(),
-                prototype
+                prototype,
+                i_iter
             )
 
         loss = loss_sup + unsup_loss + contra_loss
