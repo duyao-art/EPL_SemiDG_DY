@@ -567,8 +567,8 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
             train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
                                optimizer, ema_optimizer, step_schedule, cross_criterion, epoch)
 
-        step_schedule.step()
-        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        # step_schedule.step()
+        # default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
 
         # Print the information.
         print(
