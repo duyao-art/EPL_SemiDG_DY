@@ -42,8 +42,8 @@ default_config = dict(
     gpus=[0],
     ifFast=False,
     Pretrain=True,
-    pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
-    # pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
+    # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
+    pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
 
     restore=False,
     restore_from=name+'.pt',
