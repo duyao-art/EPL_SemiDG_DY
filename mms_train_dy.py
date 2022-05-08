@@ -443,7 +443,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 这里可以认为矢量图的相加，因为每个loss项都保存了其对应的计算图。
 
         loss = loss_sup + cps_loss
-        # loss = (loss-config['b']).abs() + config['b']
+        loss = (loss-config['b']).abs() + config['b']
 
         loss.backward()
         optimizer.step()
