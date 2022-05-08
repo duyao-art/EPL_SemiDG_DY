@@ -28,8 +28,8 @@ from utils.custom_collate import SegCollate
 # multiple GPU setting
 CUDA_LAUNCH_BLOCKING = 1
 gpus = default_config['gpus']
-os.environ['CUDA_VISIBLE_DEVICES'] = gpus
-# torch.cuda.set_device('cuda:{}'.format(gpus[1]))
+# os.environ['CUDA_VISIBLE_DEVICES'] = gpus
+torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
@@ -173,8 +173,8 @@ def ini_model_dy():
     ema_model = ema_model.to(device)
     ema_model.device = device
 
-    model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[1])
-    ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[1])
+    model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[0])
+    ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[0])
 
     return model, ema_model
 
