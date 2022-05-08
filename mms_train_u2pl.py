@@ -171,8 +171,8 @@ def ini_model_dy():
     ema_model = ema_model.to(device)
     ema_model.device = device
 
-    model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[0])
-    ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[0])
+    model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[1])
+    ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[1])
 
     return model, ema_model
 
