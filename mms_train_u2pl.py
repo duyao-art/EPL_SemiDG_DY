@@ -12,10 +12,10 @@ from torchvision import transforms
 import torch.distributed as dist
 import torchvision.models as models
 
-from network.network import my_net
+from network.network_u2pl import my_net
 from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot, dequeue_and_enqueue
 # from mms_dataloader_dy import get_meta_split_data_loaders
-from mms_dataloader_dy import get_meta_split_data_loaders
+from mms_dataloader_dy_u2pl import get_meta_split_data_loaders
 from config_u2pl_dy import default_config
 from utils.dice_loss import dice_coeff
 # from losses import SupConLoss
