@@ -2,7 +2,7 @@
 name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
-    batch_size=1,
+    batch_size=2,
     num_epoch=50,
     learning_rate=1e-4,            # learning rate of Adam
     weight_decay=0.01,             # weight decay
@@ -27,8 +27,10 @@ default_config = dict(
     current_class_negative_threshold=1,
     unsupervised_entropy_ignore=80,
     low_entropy_threshold=20,
-    num_negatives=50,
-    num_queries=256,
+    # num_negatives=50,
+    # num_queries=256,
+    num_negatives=20,
+    num_queries=128,
     temperature=0.5,
 
     train_name=name,
