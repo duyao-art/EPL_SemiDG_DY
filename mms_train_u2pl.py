@@ -26,8 +26,9 @@ from utils.custom_collate import SegCollate
 # dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
 
 # multiple GPU setting
+CUDA_LAUNCH_BLOCKING = 1
 gpus = default_config['gpus']
-torch.cuda.set_device('cuda:{}'.format(gpus[0]))
+torch.cuda.set_device('cuda:{}'.format(gpus[1]))
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
