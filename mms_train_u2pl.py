@@ -22,8 +22,9 @@ from utils.dice_loss import dice_coeff
 # from losses import SupConLoss
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
-# import torch.distributed as dist
-# dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
+
+import torch.distributed as dist
+dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
 
 # multiple GPU setting
 CUDA_LAUNCH_BLOCKING = 1
