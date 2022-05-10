@@ -8,17 +8,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from torchvision import transforms
-import torch.distributed as dist
-import torchvision.models as models
-
 from network.network_u2pl import my_net
 from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot, dequeue_and_enqueue
-# from mms_dataloader_dy import get_meta_split_data_loaders
 from mms_dataloader_dy_u2pl import get_meta_split_data_loaders
 from config_u2pl_dy import default_config
 from utils.dice_loss import dice_coeff
-# from losses import SupConLoss
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
 
@@ -28,14 +22,11 @@ dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, worl
 # multiple GPU setting
 CUDA_LAUNCH_BLOCKING = 1
 gpus = default_config['gpus']
-# os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-
-
 device = get_device()
 
 # ------------------------------point 9 ------------------------------
@@ -227,8 +218,6 @@ class SquareLoss(object):
 
 def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
 
-    # if epoch == 5:
-    #     learning_rate = learning_rate / 2
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=learning_rate, weight_decay=weight_decay)

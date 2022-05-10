@@ -41,11 +41,10 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[0,1],
-    gpus=[0],
+    gpus=[6,7],
     ifFast=False,
     Pretrain=True,
-    pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
-    # pretrain_file='/home/qinzhang/qinggang/MMData/resnet50_v1c.pth',
+    pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',
     # pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
 
     restore=False,

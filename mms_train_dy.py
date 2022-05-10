@@ -1,24 +1,17 @@
-import os
 import sys
 import math
 import wandb
 import numpy as np
 from tqdm import tqdm
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
-from torchvision import transforms
-import torch.distributed as dist
-import torchvision.models as models
-
 from network.network import my_net
 from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot
 from mms_dataloader import get_meta_split_data_loaders
 from config_dy import default_config
 from utils.dice_loss import dice_coeff
-# from losses import SupConLoss
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
 
@@ -222,14 +215,9 @@ class SquareLoss(object):
 
 def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
 
-    # if epoch == 5:
-    #     learning_rate = learning_rate / 2
     # Initialize two optimizer.
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
-    # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=5, gamma=0.9, optimizer=optimizer)
     # step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=40, T_mult=1)
-
-    # step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [5, 10, 15, 25], gamma=0.5, last_epoch=-1)
     step_schedule = torch.optim.lr_scheduler.MultiStepLR(optimizer, [10, 15, 20, 30], gamma=0.2, last_epoch=-1)
     # 问题出在哪里呢？
 

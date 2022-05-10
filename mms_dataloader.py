@@ -5,20 +5,12 @@ from torchvision import transforms
 from torchvision.transforms import InterpolationMode
 import torchvision.transforms.functional as F
 import torch
-import torch.nn as nn
 import os
-import sys
-import torchvision.utils as vutils
 import numpy as np
-import torch.nn.init as init
 import torch.utils.data as data
 import random
-import xlrd
 import math
 from skimage.exposure import match_histograms
-import matplotlib.pyplot as plt
-
-from utils.utils import im_convert
 from utils.data_utils import colorful_spectrum_mix, fourier_transform, save_image
 from config_dy import default_config
 
@@ -51,53 +43,29 @@ from config_dy import default_config
 
 # /root/autodl-tmp/duyao/
 
-LabeledVendorA_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorA/'
-LabeledVendorA_mask_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorA/'
-ReA_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorA/'
+LabeledVendorA_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorA/'
+LabeledVendorA_mask_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorA/'
+ReA_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorA/'
 
-LabeledVendorB2_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center2/'
-LabeledVendorB2_mask_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center2/'
-ReB2_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center2/'
+LabeledVendorB2_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center2/'
+LabeledVendorB2_mask_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center2/'
+ReB2_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center2/'
 
-LabeledVendorB3_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center3/'
-LabeledVendorB3_mask_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center3/'
-ReB3_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center3/'
+LabeledVendorB3_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center3/'
+LabeledVendorB3_mask_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center3/'
+ReB3_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center3/'
 
-LabeledVendorC_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorC/'
-LabeledVendorC_mask_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorC/'
-ReC_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorC/'
+LabeledVendorC_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorC/'
+LabeledVendorC_mask_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorC/'
+ReC_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorC/'
 
-LabeledVendorD_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorD/'
-LabeledVendorD_mask_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorD/'
-ReD_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorD/'
+LabeledVendorD_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorD/'
+LabeledVendorD_mask_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorD/'
+ReD_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorD/'
 
-UnlabeledVendorC_data_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_data/Unlabeled/vendorC/'
-UnReC_dir = '/root/autodl-tmp/duyao/MMData/OpenDataset/mnms_split_2D_re/Unlabeled/vendorC/'
+UnlabeledVendorC_data_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_data/Unlabeled/vendorC/'
+UnReC_dir = '/home/listu/yaodu/MMData/OpenDataset/mnms_split_2D_re/Unlabeled/vendorC/'
 
-# /home/qinzhang/qinggang/MMData/
-
-# LabeledVendorA_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorA/'
-# LabeledVendorA_mask_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorA/'
-# ReA_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorA/'
-#
-# LabeledVendorB2_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center2/'
-# LabeledVendorB2_mask_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center2/'
-# ReB2_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center2/'
-#
-# LabeledVendorB3_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorB/center3/'
-# LabeledVendorB3_mask_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorB/center3/'
-# ReB3_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorB/center3/'
-#
-# LabeledVendorC_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorC/'
-# LabeledVendorC_mask_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorC/'
-# ReC_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorC/'
-#
-# LabeledVendorD_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Labeled/vendorD/'
-# LabeledVendorD_mask_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_mask/Labeled/vendorD/'
-# ReD_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Labeled/vendorD/'
-#
-# UnlabeledVendorC_data_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_data/Unlabeled/vendorC/'
-# UnReC_dir = '/home/qinzhang/qinggang/MMData/OpenDataset/mnms_split_2D_re/Unlabeled/vendorC/'
 
 Re_dir = [ReA_dir, ReB2_dir, ReB3_dir, ReC_dir, ReD_dir]
 Labeled_data_dir = [LabeledVendorA_data_dir, LabeledVendorB2_data_dir, LabeledVendorB3_data_dir, LabeledVendorC_data_dir,
