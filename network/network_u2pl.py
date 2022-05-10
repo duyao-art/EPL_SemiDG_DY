@@ -1,5 +1,4 @@
 from network.deeplabv3p import SingleNetwork, init_weight
-# from config_dy import default_config
 from config_u2pl_dy import default_config
 import torch
 import torch.nn as nn
