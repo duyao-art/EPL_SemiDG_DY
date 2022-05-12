@@ -40,7 +40,7 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[0,1],
-    gpus=[5],
+    gpus=[4,5],
     ifFast=False,
     Pretrain=True,
     pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',
