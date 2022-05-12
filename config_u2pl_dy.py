@@ -28,8 +28,8 @@ default_config = dict(
     low_entropy_threshold=20,
     # num_negatives=50,
     # num_queries=256,
-    num_negatives=30,
-    num_queries=128,
+    num_negatives=20,
+    num_queries=36,
     temperature=0.5,
 
     train_name=name,
