@@ -25,6 +25,9 @@ wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
 config = wandb.config
 device = get_device()
 
+torch.distributed.init_process_group('nccl',init_method='file:///home/.../my_file',world_size=1,rank=0)
+
+
 # ------------------------------point 9 ------------------------------
 
 # 这里对pre_data做了修改，对于label data, 其不再进行fourier aug,保证其本身的变化不会太大
