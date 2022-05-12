@@ -169,7 +169,7 @@ def ini_model_dy():
 def create_model(ema=False, restore=False, restore_from=None):
 
     if restore:
-        model_path = './tmodel/' + str(restore_from)
+        model_path = './tmodel/u2pl/' + str(restore_from)
         model = torch.load(model_path)
         print("restore from", model_path)
     else:
@@ -782,8 +782,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         loss.backward()
         optimizer.step()
         ema_optimizer.step()
-        step_schedule.step()
-        default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
+        # step_schedule.step()
+        # default_config['learning_rate'] = optimizer.param_groups[-1]['lr']
 
         # if epoch == 7:
         #     default_config['learning_rate'] = optimizer.param_groups[-1]['lr'] / 2
@@ -808,7 +808,8 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
     total_unsup_loss = sum(total_unsup_loss) / len(total_unsup_loss)
     total_con_loss = sum(total_con_loss) / len(total_con_loss)
 
-    return model, total_loss, total_loss_sup, total_unsup_loss, total_con_loss, default_config['learning_rate']
+    # return model, total_loss, total_loss_sup, total_unsup_loss, total_con_loss, default_config['learning_rate']
+    return model, total_loss, total_loss_sup, total_unsup_loss, total_con_loss
 
 # use the function to calculate the valid loss or test loss
 
@@ -918,9 +919,9 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         unlabel_dataloader_1 = iter(unlabel_loader_1)
 
         # normal images
-        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss, default_config['learning_rate'] = \
-            train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
-                               optimizer, ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
+        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss,  = train_one_epoch_dy(model, niters_per_epoch,
+            label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer, ema_optimizer, step_schedule,
+            cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
 
         # Print the information.
         print(
@@ -954,7 +955,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         if val_dice > best_dice:
             best_dice = val_dice
             print('saving model with best_dice {:.5f}'.format(best_dice))
-            model_name = './tmodel/' + model_path
+            model_name = './tmodel/u2pl/' + model_path
             torch.save(model.module, model_name)
 
 
