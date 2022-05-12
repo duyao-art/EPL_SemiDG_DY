@@ -25,8 +25,8 @@ wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
 config = wandb.config
 device = get_device()
 
-torch.distributed.init_process_group('nccl',init_method='file:///home/listu/yaodu/.../my_file',world_size=1,rank=0)
-
+torch.distributed.init_process_group('nccl',init_method='file:///home/listu/.../my_file',world_size=1,rank=0)
+# torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
 
 # ------------------------------point 9 ------------------------------
 
