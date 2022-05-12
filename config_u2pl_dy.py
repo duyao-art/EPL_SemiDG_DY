@@ -1,4 +1,3 @@
-# rename the path as remote path /home/qinzhang/qinggang/EPL_SemiDG_DY/
 name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
@@ -41,11 +40,10 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[0,1],
-    gpus=[6,7],
+    gpus=[5],
     ifFast=False,
     Pretrain=True,
     pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',
-    # pretrain_file='/root/autodl-tmp/duyao/MMData/resnet50_v1c.pth',
 
     restore=False,
     restore_from=name+'.pt',
