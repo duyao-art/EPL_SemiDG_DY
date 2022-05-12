@@ -1,7 +1,7 @@
 name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
-    batch_size=2,
+    batch_size=4,
     num_epoch=50,
     learning_rate=1e-4,            # learning rate of Adam
     weight_decay=0.01,             # weight decay
