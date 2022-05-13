@@ -21,6 +21,8 @@ gpus = default_config['gpus']
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '5678'
 # os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 # device = torch.device('cuda:0')
 use_cuda = torch.cuda.is_available()
