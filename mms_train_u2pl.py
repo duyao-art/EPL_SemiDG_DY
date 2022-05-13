@@ -34,7 +34,7 @@ device = get_device()
 # 分布式计算 torch.distributed
 # 数据并行 torch.nn.DataParallel
 # torch.distributed 在调用前，
-torch.distributed.init_process_group('nccl',init_method='tcp://143.89.46.196:68 ',world_size=1,rank=0)
+# torch.distributed.init_process_group('nccl',init_method='tcp://143.89.46.196:68 ',world_size=1,rank=0)
 
 # ------------------------------point 9 ------------------------------
 
