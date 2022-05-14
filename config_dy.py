@@ -12,7 +12,7 @@ default_config = dict(
     # stop training to avoid overfitting
     # b=0.1588,
     # b=0.1882,
-    b=0.2266,
+    b=0.2600,
 
     num_class=4,
 
