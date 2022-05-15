@@ -40,7 +40,7 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[0,1],
-    gpus=[4,5],
+    gpus=[4],
     # gpus=[0],
     ifFast=False,
     Pretrain=True,
