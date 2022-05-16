@@ -19,19 +19,20 @@ from utils.custom_collate import SegCollate
 # multiple GPU setting
 # gpus = default_config['gpus']
 # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
+# device = get_device()
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = default_config['gpu']
+use_cuda = torch.cuda.is_available()
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 # os.environ['MASTER_ADDR'] = 'localhost'
 # os.environ['MASTER_PORT'] = '5678'
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '5'
-device = torch.device('cuda:5')
-use_cuda = torch.cuda.is_available()
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-# device = get_device()
 
 
 # 分布式计算 torch.distributed

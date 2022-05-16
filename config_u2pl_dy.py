@@ -41,6 +41,7 @@ default_config = dict(
 
     # gpus=[0,1],
     gpus=[5],
+    gpu='5',
     # gpus=[0],
     ifFast=False,
     Pretrain=True,
