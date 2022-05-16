@@ -17,26 +17,26 @@ import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
 
 # multiple GPU setting
-gpus = default_config['gpus']
-torch.cuda.set_device('cuda:{}'.format(gpus[0]))
+# gpus = default_config['gpus']
+# torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
 os.environ['MASTER_ADDR'] = 'localhost'
 os.environ['MASTER_PORT'] = '5678'
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-# device = torch.device('cuda:0')
+os.environ['CUDA_VISIBLE_DEVICES'] = '0'
+device = torch.device('cuda:0')
 use_cuda = torch.cuda.is_available()
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-device = get_device()
+# device = get_device()
 
 
 # 分布式计算 torch.distributed
 # 数据并行 torch.nn.DataParallel
 # torch.distributed 在调用前，
-torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
+# torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
 
 # ------------------------------point 9 ------------------------------
 
@@ -177,8 +177,8 @@ def ini_model_dy():
     ema_model = ema_model.cuda()
 
     # 数据并行
-    model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[0])
-    ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[0])
+    # model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[0])
+    # ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[0])
 
     return model, ema_model
 
