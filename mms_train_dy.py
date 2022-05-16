@@ -249,7 +249,7 @@ def cal_variance(pred, aug_pred):
     return variance, exp_variance
 
 
-def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
+def train_one_epoch_dy(model,ema_model,niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
                        ema_optimizer, step_schedule, cross_criterion, epoch):
 
     # loss data
@@ -331,14 +331,18 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             # Estimate the pseudo-label with model_l using original data
             # 这里得到伪标签没有用到梯度，不必更新
 
-            logits_u0, _ = model(unsup_imgs_0)
-            logits_u1, _ = model(unsup_imgs_1)
+            # logits_u0, _ = model(unsup_imgs_0)
+            # logits_u1, _ = model(unsup_imgs_1)
+            logits_u0, _ = ema_model(unsup_imgs_0)
+            logits_u1, _ = ema_model(unsup_imgs_1)
 
             logits_u0 = logits_u0.detach()
             logits_u1 = logits_u1.detach()
 
-            aug_logits_u0, _ = model(aug_unsup_imgs_0)
-            aug_logits_u1, _ = model(aug_unsup_imgs_1)
+            # aug_logits_u0, _ = model(aug_unsup_imgs_0)
+            # aug_logits_u1, _ = model(aug_unsup_imgs_1)
+            aug_logits_u0, _ = ema_model(aug_unsup_imgs_0)
+            aug_logits_u1, _ = ema_model(aug_unsup_imgs_1)
 
             aug_logits_u0 = aug_logits_u0.detach()
             aug_logits_u1 = aug_logits_u1.detach()
@@ -552,7 +556,7 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
 
         # normal images
         model, total_loss, total_loss_sup, total_cps_loss, total_con_loss = \
-            train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
+            train_one_epoch_dy(model,ema_model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1,
                                optimizer, ema_optimizer, step_schedule, cross_criterion, epoch)
 
         # step_schedule.step()
