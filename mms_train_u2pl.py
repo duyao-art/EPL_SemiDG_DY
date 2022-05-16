@@ -21,10 +21,11 @@ from utils.custom_collate import SegCollate
 # torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
 os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5678'
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-device = torch.device('cuda:0')
+# os.environ['MASTER_ADDR'] = 'localhost'
+# os.environ['MASTER_PORT'] = '5678'
+
+os.environ['CUDA_VISIBLE_DEVICES'] = '5'
+device = torch.device('cuda:5')
 use_cuda = torch.cuda.is_available()
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
