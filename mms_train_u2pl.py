@@ -26,8 +26,8 @@ os.environ['CUDA_VISIBLE_DEVICES'] = default_config['gpu']
 use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-# os.environ['MASTER_ADDR'] = 'localhost'
-# os.environ['MASTER_PORT'] = '5678'
+os.environ['MASTER_ADDR'] = 'localhost'
+os.environ['MASTER_PORT'] = '5678'
 
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
@@ -38,7 +38,7 @@ config = wandb.config
 # 分布式计算 torch.distributed
 # 数据并行 torch.nn.DataParallel
 # torch.distributed 在调用前，
-# torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
+torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
 
 # ------------------------------point 9 ------------------------------
 
