@@ -938,13 +938,13 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         unlabel_dataloader_1 = iter(unlabel_loader_1)
 
         # normal images
-        model, total_loss, total_loss_sup, total_cps_loss, total_con_loss,  = train_one_epoch_dy(model, niters_per_epoch,
+        model, total_loss, total_sup_loss, total_unsup_loss, total_con_loss = train_one_epoch_dy(model, niters_per_epoch,
             label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer, ema_optimizer, step_schedule,
             cross_criterion, epoch, memobank, queue_ptrlis, queue_size)
 
         # Print the information.
         print(
-            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_loss_sup:.5f}  total_cps_loss = {total_cps_loss:.5f}")
+            f"[ Normal image Train | {epoch + 1:03d}/{num_epoch:03d} ] learning_rate = {default_config['learning_rate']:.5f}  total_loss = {total_loss:.5f}  total_loss_sup = {total_sup_loss:.5f}  total_loss_unsup = {total_unsup_loss:.5f}  total_loss_con = {total_con_loss:.5f}")
 
         # ---------- Validation----------
         val_loss, val_dice, val_dice_lv, val_dice_myo, val_dice_rv = test_dual_dy(
@@ -966,9 +966,8 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
                   'test/test_dice_myo': test_dice_myo, 'test/test_dice_rv': test_dice_rv})
         # loss
         wandb.log({'epoch': epoch + 1, 'learning_rate': default_config['learning_rate'],
-                   'loss/total_loss': total_loss, 'loss/total_loss_sup': total_loss_sup,
-                   'loss/total_cps_loss': total_cps_loss, 'loss/test_loss': test_loss,
-                   'loss/val_loss': val_loss, 'loss/con_loss': total_con_loss})
+                   'loss/total_loss': total_loss, 'loss/total_loss_sup': total_sup_loss,
+                   'loss/total_loss_unsup': total_unsup_loss,'loss/total_loss_con': total_con_loss,'loss/val_loss': val_loss,'loss/test_loss': test_loss})
 
         # if the model improves, save a checkpoint at this epoch
         if val_dice > best_dice:

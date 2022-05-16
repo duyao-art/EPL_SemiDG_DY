@@ -1,11 +1,11 @@
 name = 'MMS_deeplab_2%_D_CM_U2PL_DY'
 # hyperparameter
 default_config = dict(
-    batch_size=2,
+    batch_size=6,
     num_epoch=50,
     learning_rate=1e-4,            # learning rate of Adam
     weight_decay=0.01,             # weight decay
-    num_workers=0,
+    num_workers=8,
     ema_decay=0.999,
     T=0.5,
     alpha=0.75,
@@ -40,8 +40,9 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[0,1],
-    gpus=[5],
-    gpu='5',
+    # gpus=[5],
+    # gpu='5',
+    gpu='0',
     # gpus=[0],
     ifFast=False,
     Pretrain=True,
