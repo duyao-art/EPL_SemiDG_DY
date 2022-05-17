@@ -765,7 +765,7 @@ class ImageFolder(data.Dataset):
 
 if __name__ == '__main__':
 
-    test_vendor = 'A'
+    test_vendor = 'D'
 
     domain_1_labeled_dataset, domain_2_labeled_dataset, domain_3_labeled_dataset, \
     domain_1_unlabeled_dataset, domain_2_unlabeled_dataset, domain_3_unlabeled_dataset, \

@@ -2,7 +2,7 @@ name = 'MMS_deeplab_2%_D_CM_DY'
 # hyperparameter
 default_config = dict(
     batch_size=32,
-    num_epoch=10,
+    num_epoch=30,
     learning_rate=1e-4,            # learning rate of Adam
     weight_decay=0.01,             # weight decay 
     num_workers=8,
@@ -11,7 +11,8 @@ default_config = dict(
     alpha=0.75,
     # stop training to avoid overfitting
     # b=0.1588,
-    b=0.1882,
+    # b=0.1882,
+    b=0.23150,
     # b=0.22600,
     # b=0.2600,
     # b=0.21800,

@@ -11,7 +11,7 @@ import random
 import math
 from skimage.exposure import match_histograms
 from utils.data_utils import colorful_spectrum_mix, fourier_transform, save_image
-from config import default_config
+from config_u2pl_dy import default_config
 
 # torch.cuda.set_device(6)
 
@@ -761,7 +761,7 @@ class ImageFolder(data.Dataset):
 
 if __name__ == '__main__':
 
-    test_vendor = 'A'
+    test_vendor = 'D'
 
     domain_1_labeled_dataset, domain_2_labeled_dataset, domain_3_labeled_dataset, \
     domain_1_unlabeled_dataset, domain_2_unlabeled_dataset, domain_3_unlabeled_dataset, \

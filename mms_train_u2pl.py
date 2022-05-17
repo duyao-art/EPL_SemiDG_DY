@@ -15,6 +15,7 @@ from config_u2pl_dy import default_config
 from utils.dice_loss import dice_coeff
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
+import time
 
 # multiple GPU setting
 # gpus = default_config['gpus']
@@ -27,7 +28,7 @@ use_cuda = torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5678'
+os.environ['MASTER_PORT'] = '5679'
 
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
@@ -881,6 +882,8 @@ def test_dual_dy(model, loader):
         tot_myo += dice_coeff(pred[:, 1, :, :],
                               mask[:, 1, :, :], device).item()
         tot_rv += dice_coeff(pred[:, 2, :, :], mask[:, 2, :, :], device).item()
+
+        time.sleep(0.003)
 
     r_loss = sum(loss) / len(loss)
     dice_lv = tot_lv/len(loader)
