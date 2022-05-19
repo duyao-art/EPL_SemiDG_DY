@@ -39,7 +39,7 @@ config = wandb.config
 # 分布式计算 torch.distributed
 # 数据并行 torch.nn.DataParallel
 # torch.distributed 在调用前，
-torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
+# torch.distributed.init_process_group('nccl',init_method='env://',world_size=1,rank=0)
 
 # ------------------------------point 9 ------------------------------
 
@@ -374,15 +374,15 @@ def compute_contra_memobank_loss(rep,label_l,label_u,prob_l,prob_u,low_mask,high
         keys = rep_teacher[negative_mask].detach()
 
         # keys中负样本的数量(有效的负pixel的数量）
-        new_keys.append(
-            dequeue_and_enqueue(
-                keys=keys,
-                queue=memobank[i],
-                queue_ptr=queue_prtlis[i],
-                queue_size=queue_size[i],
-            )
-        )
-
+        # new_keys.append(
+        #     dequeue_and_enqueue(
+        #         keys=keys,
+        #         queue=memobank[i],
+        #         queue_ptr=queue_prtlis[i],
+        #         queue_size=queue_size[i],
+        #     )
+        # )
+        new_keys.append(default_config['batch_size'])
         if low_valid_pixel_seg.sum() > 0:
             seg_num_list.append(int(low_valid_pixel_seg.sum().item()))
             valid_classes.append(i)
