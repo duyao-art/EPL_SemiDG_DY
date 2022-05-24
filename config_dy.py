@@ -6,7 +6,8 @@ default_config = dict(
     learning_rate=1e-4,            # learning rate of Adam
     weight_decay=0.01,             # weight decay 
     num_workers=8,
-    ema_decay=0.999,
+    # ema_decay=0.999,
+    ema_decay=0.99,
     T=0.5,
     alpha=0.75,
     # stop training to avoid overfitting
