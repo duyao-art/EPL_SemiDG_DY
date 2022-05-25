@@ -547,7 +547,7 @@ def test_dual_dy(model_l, model_r, loader):
 def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_loader, learning_rate, weight_decay,num_epoch, model_path, niters_per_epoch):
 
     # Initialize model
-    model_l, model_r = ini_model_dy(config_dy['restore'], config_dy['restore_from'])
+    model_l, model_r = ini_model_dy(default_config['restore'], default_config['restore_from'])
 
     # Initialize optimizer.
     optimizer_l, optimizer_r = ini_optimizer_dy(model_l, model_r, learning_rate, weight_decay)
