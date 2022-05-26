@@ -540,6 +540,7 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
 
         i_iter = epoch * len(label_dataloader) + idx
         minibatch = label_dataloader.next()
+
         unsup_minibatch_0 = unlabel_dataloader_0.next()
         unsup_minibatch_1 = unlabel_dataloader_1.next()
 
