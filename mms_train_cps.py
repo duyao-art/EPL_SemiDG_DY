@@ -232,6 +232,7 @@ def ini_optimizer_dy(model_l, model_r, learning_rate, weight_decay):
 
 
 def linear_rampup(current, rampup_length=config['num_epoch']):
+
     if rampup_length == 0:
         return 1.0
     else:
@@ -309,6 +310,7 @@ def train_one_epoch_dy(model_l,model_r,niters_per_epoch, label_dataloader, unlab
 
         unsup_imgs_0 = unsup_imgs_0.to(device)
         unsup_imgs_1 = unsup_imgs_1.to(device)
+
         aug_unsup_imgs_0 = aug_unsup_imgs_0.to(device)
         aug_unsup_imgs_1 = aug_unsup_imgs_1.to(device)
 
@@ -369,23 +371,31 @@ def train_one_epoch_dy(model_l,model_r,niters_per_epoch, label_dataloader, unlab
         l = max(l, 1-l)
         batch_mix_masks = l
 
-        logits_cons_tea_1 = torch.softmax(logits_u0_tea_1, dim=1) * batch_mix_masks + torch.softmax(logits_u1_tea_1, dim=1) * (1 - batch_mix_masks)
+        # logits_cons_tea_1 = torch.softmax(logits_u0_tea_1, dim=1) * batch_mix_masks + torch.softmax(logits_u1_tea_1, dim=1) * (1 - batch_mix_masks)
+        #
+        # logits_cons_tea_2 = torch.softmax(logits_u0_tea_2, dim=1) * batch_mix_masks + torch.softmax(logits_u1_tea_2, dim=1) * (1 - batch_mix_masks)
 
-        logits_cons_tea_2 = torch.softmax(logits_u0_tea_2, dim=1) * batch_mix_masks + torch.softmax(logits_u1_tea_2, dim=1) * (1 - batch_mix_masks)
+        # pt_cons_tea_1 = logits_cons_tea_1 ** (1 / config['T'])
+        # logits_cons_tea_1 = pt_cons_tea_1 / pt_cons_tea_1.sum(dim=1, keepdim=True)
+        # logits_cons_tea_1 = logits_cons_tea_1.detach()
+        # _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
+        # ps_label_1 = ps_label_1.long()
+        #
+        #
+        # pt_cons_tea_2 = logits_cons_tea_2 ** (1 / config['T'])
+        # logits_cons_tea_2 = pt_cons_tea_2 / pt_cons_tea_2.sum(dim=1, keepdim=True)
+        # logits_cons_tea_2 = logits_cons_tea_2.detach()
+        # _, ps_label_2 = torch.max(logits_cons_tea_2, dim=1)
+        # ps_label_2 = ps_label_2.long()
 
-        pt_cons_tea_1 = logits_cons_tea_1 ** (1 / config['T'])
-        logits_cons_tea_1 = pt_cons_tea_1 / pt_cons_tea_1.sum(dim=1, keepdim=True)
-        logits_cons_tea_1 = logits_cons_tea_1.detach()
+        logits_cons_tea_1 = logits_u0_tea_1 * batch_mix_masks + logits_u1_tea_1 * (1 - batch_mix_masks)
         _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
         ps_label_1 = ps_label_1.long()
 
-
-        pt_cons_tea_2 = logits_cons_tea_2 ** (1 / config['T'])
-        logits_cons_tea_2 = pt_cons_tea_2 / pt_cons_tea_2.sum(dim=1, keepdim=True)
-        logits_cons_tea_2 = logits_cons_tea_2.detach()
+        logits_cons_tea_2 = logits_u0_tea_2 * batch_mix_masks + logits_u1_tea_2 * (1 - batch_mix_masks)
         _, ps_label_2 = torch.max(logits_cons_tea_2, dim=1)
         ps_label_2 = ps_label_2.long()
-
+        
         # Mix teacher predictions using same mask
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0

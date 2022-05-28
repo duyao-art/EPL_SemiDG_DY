@@ -169,21 +169,25 @@ def cal_variance(pred, aug_pred):
 
 
 def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer_r, optimizer_l, cross_criterion, epoch):
+
     # loss data
     total_loss = []
     total_loss_l = []
     total_loss_r = []
     total_cps_loss = []
     total_con_loss = []
+
     # tqdm
     bar_format = '{desc}[{elapsed}<{remaining},{rate_fmt}]'
     pbar = tqdm(range(niters_per_epoch),
                 file=sys.stdout, bar_format=bar_format)
+
     kl_distance = nn.KLDivLoss(reduction='none')
     sm = torch.nn.Softmax(dim=1)
     log_sm = torch.nn.LogSoftmax(dim=1)
 
     for idx in pbar:
+
         minibatch = label_dataloader.next()
         unsup_minibatch_0 = unlabel_dataloader_0.next()
         unsup_minibatch_1 = unlabel_dataloader_1.next()
@@ -206,8 +210,10 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
 
         unsup_imgs_0 = unsup_imgs_0.to(device)
         unsup_imgs_1 = unsup_imgs_1.to(device)
+
         aug_unsup_imgs_0 = aug_unsup_imgs_0.to(device)
         aug_unsup_imgs_1 = aug_unsup_imgs_1.to(device)
+
         mask_params = mask_params.to(device)
 
         batch_mix_masks = mask_params
@@ -225,15 +231,18 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
             logits_u1_tea_1, _ = model_l(unsup_imgs_1)
             logits_u0_tea_1 = logits_u0_tea_1.detach()
             logits_u1_tea_1 = logits_u1_tea_1.detach()
+
             aug_logits_u0_tea_1, _ = model_l(aug_unsup_imgs_0)
             aug_logits_u1_tea_1, _ = model_l(aug_unsup_imgs_1)
             aug_logits_u0_tea_1 = aug_logits_u0_tea_1.detach()
             aug_logits_u1_tea_1 = aug_logits_u1_tea_1.detach()
             # Estimate the pseudo-label with model_r using augmentated data
+
             logits_u0_tea_2, _ = model_r(unsup_imgs_0)
             logits_u1_tea_2, _ = model_r(unsup_imgs_1)
             logits_u0_tea_2 = logits_u0_tea_2.detach()
             logits_u1_tea_2 = logits_u1_tea_2.detach()
+
             aug_logits_u0_tea_2, _ = model_r(aug_unsup_imgs_0)
             aug_logits_u1_tea_2, _ = model_r(aug_unsup_imgs_1)
             aug_logits_u0_tea_2 = aug_logits_u0_tea_2.detach()
@@ -247,6 +256,8 @@ def train_one_epoch(model_l, model_r, niters_per_epoch, label_dataloader, unlabe
         # Mix teacher predictions using same mask
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
+
+
         logits_cons_tea_1 = logits_u0_tea_1 * \
             (1 - batch_mix_masks) + logits_u1_tea_1 * batch_mix_masks
         _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
