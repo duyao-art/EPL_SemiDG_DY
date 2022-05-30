@@ -324,13 +324,13 @@ def train_one_epoch_dy(model_l,model_r,niters_per_epoch, label_dataloader, unlab
         # 结果要好于仅仅对unlabeled data做数据增强，这里可以在分割中尝试
         # 那这里就解释通了，对于unlabeled　data,采用了mixed的思路，同时做了数据增强
 
-        l = np.random.beta(config['alpha'], config['alpha'])
-        l = max(l, 1-l)
-        batch_mix_masks = l
+        # l = np.random.beta(config['alpha'], config['alpha'])
+        # l = max(l, 1-l)
+        # batch_mix_masks = l
 
-        unsup_imgs_mixed = unsup_imgs_0 * batch_mix_masks + unsup_imgs_1 * (1 - batch_mix_masks)
+        unsup_imgs_mixed = unsup_imgs_0 * (1 - batch_mix_masks) + unsup_imgs_1 * batch_mix_masks
         # unlabeled r mixed images
-        aug_unsup_imgs_mixed = aug_unsup_imgs_0 * batch_mix_masks + aug_unsup_imgs_1 * (1 - batch_mix_masks)
+        aug_unsup_imgs_mixed = aug_unsup_imgs_0 * (1 - batch_mix_masks) + aug_unsup_imgs_1 * batch_mix_masks
 
         # add uncertainty
         # this step is to generate pseudo labels
@@ -367,9 +367,9 @@ def train_one_epoch_dy(model_l,model_r,niters_per_epoch, label_dataloader, unlab
 
         # the augmented data is used to calculate the average pseudo label
 
-        l = np.random.beta(config['alpha'], config['alpha'])
-        l = max(l, 1-l)
-        batch_mix_masks = l
+        # l = np.random.beta(config['alpha'], config['alpha'])
+        # l = max(l, 1-l)
+        # batch_mix_masks = l
 
         # logits_cons_tea_1 = torch.softmax(logits_u0_tea_1, dim=1) * batch_mix_masks + torch.softmax(logits_u1_tea_1, dim=1) * (1 - batch_mix_masks)
         #
@@ -388,14 +388,14 @@ def train_one_epoch_dy(model_l,model_r,niters_per_epoch, label_dataloader, unlab
         # _, ps_label_2 = torch.max(logits_cons_tea_2, dim=1)
         # ps_label_2 = ps_label_2.long()
 
-        logits_cons_tea_1 = logits_u0_tea_1 * batch_mix_masks + logits_u1_tea_1 * (1 - batch_mix_masks)
+        logits_cons_tea_1 = logits_u0_tea_1 * (1 - batch_mix_masks) + logits_u1_tea_1 * batch_mix_masks
         _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
         ps_label_1 = ps_label_1.long()
 
-        logits_cons_tea_2 = logits_u0_tea_2 * batch_mix_masks + logits_u1_tea_2 * (1 - batch_mix_masks)
+        logits_cons_tea_2 = logits_u0_tea_2 * (1 - batch_mix_masks) + logits_u1_tea_2 * batch_mix_masks
         _, ps_label_2 = torch.max(logits_cons_tea_2, dim=1)
         ps_label_2 = ps_label_2.long()
-        
+
         # Mix teacher predictions using same mask
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
