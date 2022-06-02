@@ -31,7 +31,7 @@ default_config = dict(
     CPS_weight=3,
 
     # gpus=[6,7],
-    gpus=[4,5,6,7],
+    gpus=[5,6,7],
     ifFast=False,
     Pretrain=True,
     # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
