@@ -4,6 +4,7 @@ import wandb
 import numpy as np
 from tqdm import tqdm
 import torch
+torch.cuda.empty_cache()
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
@@ -22,7 +23,6 @@ torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 wandb.init(project='MNMS_SemiDG_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-
 
 device = get_device()
 
