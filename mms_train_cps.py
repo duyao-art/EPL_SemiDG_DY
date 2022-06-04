@@ -15,7 +15,8 @@ from config_dy import default_config
 from utils.dice_loss import dice_coeff
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
-
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 # multiple GPU setting
 gpus = default_config['gpus']
 torch.cuda.set_device('cuda:{}'.format(gpus[0]))
