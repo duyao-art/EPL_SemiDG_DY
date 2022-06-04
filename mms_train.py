@@ -65,20 +65,35 @@ def pre_data(batch_size, num_workers, test_vendor):
     collate_fn = SegCollate()
     mask_collate_fn = SegCollate(batch_aug_fn=add_mask_params_to_batch)
 
+    # label_loader = DataLoader(dataset=label_dataset, batch_size=batch_size, num_workers=num_workers,
+    #                           shuffle=True, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+    #
+    # unlabel_loader_0 = DataLoader(dataset=unlabel_dataset, batch_size=batch_size, num_workers=num_workers,
+    #                               shuffle=True, drop_last=True, pin_memory=False, collate_fn=mask_collate_fn)
+    #
+    # unlabel_loader_1 = DataLoader(dataset=unlabel_dataset, batch_size=batch_size, num_workers=num_workers,
+    #                               shuffle=True, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+    #
+    # val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, num_workers=num_workers,
+    #                         shuffle=False, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+    #
+    # test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=num_workers,
+    #                          shuffle=False, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+
     label_loader = DataLoader(dataset=label_dataset, batch_size=batch_size, num_workers=num_workers,
-                              shuffle=True, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+                              shuffle=True, drop_last=True, pin_memory=True, collate_fn=collate_fn)
 
     unlabel_loader_0 = DataLoader(dataset=unlabel_dataset, batch_size=batch_size, num_workers=num_workers,
-                                  shuffle=True, drop_last=True, pin_memory=False, collate_fn=mask_collate_fn)
+                                  shuffle=True, drop_last=True, pin_memory=True, collate_fn=mask_collate_fn)
 
     unlabel_loader_1 = DataLoader(dataset=unlabel_dataset, batch_size=batch_size, num_workers=num_workers,
-                                  shuffle=True, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+                                  shuffle=True, drop_last=True, pin_memory=True, collate_fn=collate_fn)
 
     val_loader = DataLoader(dataset=val_dataset, batch_size=batch_size, num_workers=num_workers,
-                            shuffle=False, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+                            shuffle=False, drop_last=True, pin_memory=True, collate_fn=collate_fn)
 
     test_loader = DataLoader(dataset=test_dataset, batch_size=batch_size, num_workers=num_workers,
-                             shuffle=False, drop_last=True, pin_memory=False, collate_fn=collate_fn)
+                             shuffle=False, drop_last=True, pin_memory=True, collate_fn=collate_fn)
 
     print("after length of label_dataset", len(label_dataset))
     print("length of unlabel_dataset", len(unlabel_dataset))
