@@ -26,8 +26,6 @@ default_config = dict(
     current_class_negative_threshold=1,
     unsupervised_entropy_ignore=80,
     low_entropy_threshold=20,
-    # num_negatives=50,
-    # num_queries=256,
     num_negatives=10,
     num_queries=16,
     temperature=0.5,
@@ -39,16 +37,12 @@ default_config = dict(
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
 
-    # gpus=[0,1],
-    # gpus=[5],
-    # gpu='5',
-    gpu='4',
-    # gpus=[0],
+    gpus=[4,5],
     ifFast=False,
     Pretrain=True,
-    # pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',
+    pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',
     # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
-    pretrain_file='/home/qinzhang/qinggang/MMData/resnet50_v1c.pth',
+    # pretrain_file='/home/qinzhang/qinggang/MMData/resnet50_v1c.pth',
 
 
     restore=False,

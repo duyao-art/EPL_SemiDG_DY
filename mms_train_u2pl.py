@@ -9,32 +9,31 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader, ConcatDataset
 from network.network_u2pl import my_net
-from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot, dequeue_and_enqueue
+from utils.utils import get_device, check_accuracy, check_accuracy_dual, label_to_onehot
 from mms_dataloader_dy_u2pl import get_meta_split_data_loaders
 from config_u2pl_dy import default_config
 from utils.dice_loss import dice_coeff
 import utils.mask_gen as mask_gen
 from utils.custom_collate import SegCollate
 import time
+torch.backends.cudnn.enabled = True
+torch.backends.cudnn.benchmark = True
 
 # multiple GPU setting
-# gpus = default_config['gpus']
-# torch.cuda.set_device('cuda:{}'.format(gpus[0]))
-# device = get_device()
+gpus = default_config['gpus']
+torch.cuda.set_device('cuda:{}'.format(gpus[0]))
 
-os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
-os.environ['CUDA_VISIBLE_DEVICES'] = default_config['gpu']
-use_cuda = torch.cuda.is_available()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-os.environ['MASTER_ADDR'] = 'localhost'
-os.environ['MASTER_PORT'] = '5679'
-
+# os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+# os.environ['CUDA_VISIBLE_DEVICES'] = default_config['gpu']
+# use_cuda = torch.cuda.is_available()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# os.environ['MASTER_ADDR'] = 'localhost'
+# os.environ['MASTER_PORT'] = '5679'
 
 wandb.init(project='MNMS_SemiDG_U2PL_DY', entity='du-yao',
            config=default_config, name=default_config['train_name'])
 config = wandb.config
-
+device = get_device()
 
 # 分布式计算 torch.distributed
 # 数据并行 torch.nn.DataParallel
@@ -165,25 +164,29 @@ def total_dice_loss(pred, target):
 # 这里将并行的两个模型改为EMA model，减小一半的模型更新计算量.这样只需要初始化一个model即可
 
 
-def ini_model_dy():
+def ini_model_dy(restore=False, restore_from=None):
 
-    model = create_model()
-    ema_model = create_model(ema=True)
+    if restore:
+        model_path_l = './tmodel/u2pl/' + 'l_' + str(restore_from)
+        model_path_r = './tmodel/u2pl' + 'r_' + str(restore_from)
+        model_l = torch.load(model_path_l)
+        model_r = torch.load(model_path_r)
+        print("restore from", model_path_l)
+        print("restore from", model_path_r)
+    else:
+        model_l = my_net(modelname="mydeeplabV3P")
+        model_r = my_net(modelname="mydeeplabV3P")
 
-    # model = model.to(device)
-    # model.device = device
-    #
-    # ema_model = ema_model.to(device)
-    # ema_model.device = device
+    model_l = model_l.to(device)
+    model_l.device = device
 
-    model = model.cuda()
-    ema_model = ema_model.cuda()
+    model_r = model_r.to(device)
+    model_r.device = device
 
-    # 数据并行
-    # model = nn.DataParallel(model, device_ids=gpus, output_device=gpus[0])
-    # ema_model = nn.DataParallel(ema_model, device_ids=gpus, output_device=gpus[0])
+    model_l = nn.DataParallel(model_l, device_ids=gpus, output_device=gpus[0])
+    model_r = nn.DataParallel(model_r, device_ids=gpus, output_device=gpus[0])
 
-    return model, ema_model
+    return model_l, model_r
 
 
 def create_model(ema=False, restore=False, restore_from=None):
@@ -232,18 +235,12 @@ class SquareLoss(object):
         return Lu
 
 
-def ini_optimizer_dy(model, ema_model, learning_rate, weight_decay,ema_decay):
+def ini_optimizer_dy(model_l, model_r, learning_rate, weight_decay):
 
-    # Initialize two optimizer.
-    optimizer = torch.optim.AdamW(
-        model.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    optimizer_l = torch.optim.AdamW(model_l.parameters(), lr=learning_rate, weight_decay=weight_decay)
+    optimizer_r = torch.optim.AdamW(model_r.parameters(), lr=learning_rate, weight_decay=weight_decay)
 
-    # step_schedule = torch.optim.lr_scheduler.StepLR(step_size=10, gamma=0.9, optimizer=optimizer)
-    step_schedule = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=5, T_mult=10)
-
-    ema_optimizer = WeightEMA(model, ema_model, alpha=ema_decay)
-
-    return optimizer, ema_optimizer, step_schedule
+    return optimizer_l, optimizer_r
 
 
 def compute_unsupervised_loss(predict, target, percent, pred_teacher):
@@ -518,14 +515,14 @@ def label_onehot(inputs, num_segments):
     return outputs.permute(1, 0, 2, 3)
 
 
-def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer,
-                       ema_optimizer, step_schedule, cross_criterion, epoch, memobank, queue_ptrlis, queue_size):
+def train_one_epoch_dy(model_l, model_r, niters_per_epoch, label_dataloader, unlabel_dataloader_0, unlabel_dataloader_1, optimizer, ema_optimizer, cross_criterion, epoch, memobank, queue_ptrlis, queue_size):
 
     global prototype
 
     # loss data
     total_loss = []
-    total_loss_sup = []
+    total_loss_l = []
+    total_loss_r = []
     total_unsup_loss = []
     total_con_loss = []
 
@@ -586,13 +583,13 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
         # 结果要好于仅仅对unlabeled data做数据增强，这里可以在分割中尝试
         # 那这里就解释通了，对于unlabeled　data,采用了mixed的思路，同时做了数据增强
 
-        l = np.random.beta(config['alpha'], config['alpha'])
-        l = max(l, 1-l)
-        batch_mix_masks = l
+        # l = np.random.beta(config['alpha'], config['alpha'])
+        # l = max(l, 1-l)
+        # batch_mix_masks = l
 
-        unsup_imgs_mixed = unsup_imgs_0 * batch_mix_masks + unsup_imgs_1 * (1 - batch_mix_masks)
+        unsup_imgs_mixed = unsup_imgs_0 * (1 - batch_mix_masks) + unsup_imgs_1 * batch_mix_masks
         # unlabeled r mixed images
-        aug_unsup_imgs_mixed = aug_unsup_imgs_0 * batch_mix_masks + aug_unsup_imgs_1 * (1 - batch_mix_masks)
+        aug_unsup_imgs_mixed = aug_unsup_imgs_0 * (1 - batch_mix_masks) + aug_unsup_imgs_1 * batch_mix_masks
 
         # add uncertainty
         # this step is to generate pseudo labels
@@ -601,59 +598,87 @@ def train_one_epoch_dy(model, niters_per_epoch, label_dataloader, unlabel_datalo
             # Estimate the pseudo-label with model_l using original data
             # 这里得到伪标签没有用到梯度，不必更新
 
-            logits_u0, _ = model(unsup_imgs_0)
-            logits_u1, _ = model(unsup_imgs_1)
+            logits_u0_tea_1, _ = model_l(unsup_imgs_0)
+            logits_u1_tea_1, _ = model_l(unsup_imgs_1)
+            logits_u0_tea_1 = logits_u0_tea_1.detach()
+            logits_u1_tea_1 = logits_u1_tea_1.detach()
 
-            logits_u0 = logits_u0.detach()
-            logits_u1 = logits_u1.detach()
+            aug_logits_u0_tea_1, _ = model_l(aug_unsup_imgs_0)
+            aug_logits_u1_tea_1, _ = model_l(aug_unsup_imgs_1)
+            aug_logits_u0_tea_1 = aug_logits_u0_tea_1.detach()
+            aug_logits_u1_tea_1 = aug_logits_u1_tea_1.detach()
 
-            aug_logits_u0, _ = model(aug_unsup_imgs_0)
-            aug_logits_u1, _ = model(aug_unsup_imgs_1)
+            logits_u0_tea_2, _ = model_r(unsup_imgs_0)
+            logits_u1_tea_2, _ = model_r(unsup_imgs_1)
+            logits_u0_tea_2 = logits_u0_tea_2.detach()
+            logits_u1_tea_2 = logits_u1_tea_2.detach()
 
-            aug_logits_u0 = aug_logits_u0.detach()
-            aug_logits_u1 = aug_logits_u1.detach()
+            aug_logits_u0_tea_2, _ = model_r(aug_unsup_imgs_0)
+            aug_logits_u1_tea_2, _ = model_r(aug_unsup_imgs_1)
+            aug_logits_u0_tea_2 = aug_logits_u0_tea_2.detach()
+            aug_logits_u1_tea_2 = aug_logits_u1_tea_2.detach()
+
+        logits_u0_tea_1 = (logits_u0_tea_1 + aug_logits_u0_tea_1) / 2
+        logits_u1_tea_1 = (logits_u1_tea_1 + aug_logits_u1_tea_1) / 2
+        logits_u0_tea_2 = (logits_u0_tea_2 + aug_logits_u0_tea_2) / 2
+        logits_u1_tea_2 = (logits_u1_tea_2 + aug_logits_u1_tea_2) / 2
 
         # the augmented data is used to calculate the average pseudo label
-        logits_u0 = torch.softmax(logits_u0, dim=1) + torch.softmax(aug_logits_u0, dim=1) / 2
-        logits_u1 = torch.softmax(logits_u1, dim=1) + torch.softmax(aug_logits_u1, dim=1) / 2
-
-        pt_u0 = logits_u0 ** (1 / config['T'])
-        logits_u0 = pt_u0 / pt_u0.sum(dim=1, keepdim=True)
-        logits_u0 = logits_u0.detach()
-
-        pt_u1 = logits_u1 ** (1 / config['T'])
-        logits_u1 = pt_u1 / pt_u1.sum(dim=1, keepdim=True)
-        logits_u1 = logits_u1.detach()
+        # logits_u0 = torch.softmax(logits_u0, dim=1) + torch.softmax(aug_logits_u0, dim=1) / 2
+        # logits_u1 = torch.softmax(logits_u1, dim=1) + torch.softmax(aug_logits_u1, dim=1) / 2
+        #
+        # pt_u0 = logits_u0 ** (1 / config['T'])
+        # logits_u0 = pt_u0 / pt_u0.sum(dim=1, keepdim=True)
+        # logits_u0 = logits_u0.detach()
+        #
+        # pt_u1 = logits_u1 ** (1 / config['T'])
+        # logits_u1 = pt_u1 / pt_u1.sum(dim=1, keepdim=True)
+        # logits_u1 = logits_u1.detach()
 
         # Mix teacher predictions using same mask
         # It makes no difference whether we do this with logits or probabilities as
         # the mask pixels are either 1 or 0
 
-        l = np.random.beta(config['alpha'], config['alpha'])
-        l = max(l, 1-l)
-        batch_mix_masks = l
+        # l = np.random.beta(config['alpha'], config['alpha'])
+        # l = max(l, 1-l)
+        # batch_mix_masks = l
 
-        logits_cons = logits_u0 * batch_mix_masks + logits_u1 * (1 - batch_mix_masks)
-        _, ps_label = torch.max(logits_cons, dim=1)
-        ps_label = ps_label.long()
+        # logits_cons = logits_u0 * batch_mix_masks + logits_u1 * (1 - batch_mix_masks)
+        # _, ps_label = torch.max(logits_cons, dim=1)
+        # ps_label = ps_label.long()
+
+        logits_cons_tea_1 = logits_u0_tea_1 * (1 - batch_mix_masks) + logits_u1_tea_1 * batch_mix_masks
+        _, ps_label_1 = torch.max(logits_cons_tea_1, dim=1)
+        ps_label_1 = ps_label_1.long()
+
+        logits_cons_tea_2 = logits_u0_tea_2 * (1 - batch_mix_masks) + logits_u1_tea_2 * batch_mix_masks
+        _, ps_label_2 = torch.max(logits_cons_tea_2, dim=1)
+        ps_label_2 = ps_label_2.long()
 
         # --------------------------------------------------
 
         num_labeled = len(imgs)
-
         image_all = torch.cat((imgs, unsup_imgs_mixed))
-        pred_all, rep_all = model(image_all)
-        # print(rep_all.size())
-        pred_l, pred_u = pred_all[:num_labeled], pred_all[num_labeled:]
 
         # ----------supervised loss on both models----------
 
-        sof = F.softmax(pred_l, dim=1)
-        loss_sup = total_dice_loss(sof, mask)
+        pre_sup_l, feature_l = model_l(imgs)
+        pre_sup_r, feature_r = model_r(imgs)
+
+        sof_l = F.softmax(pre_sup_l, dim=1)
+        sof_r = F.softmax(pre_sup_r, dim=1)
+
+        loss_l = total_dice_loss(sof_l, mask)
+        loss_r = total_dice_loss(sof_r, mask)
+
+        # sof = F.softmax(pred_l, dim=1)
+        # loss_sup = total_dice_loss(sof, mask)
 
         # ---------unlabeled loss---------
 
         with torch.no_grad():
+
+            # 20220605之前只是一个计算图，这个问题，明天来，把u2pl的计算结构图画出来，按照co-training的思路重新写
 
             pred_all_t, rep_all_t = model(image_all)
             prob_all_t = F.softmax(pred_all_t, dim=1)
