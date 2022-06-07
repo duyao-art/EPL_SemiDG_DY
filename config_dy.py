@@ -1,4 +1,5 @@
-name = 'MMS_deeplab_2%_D_CM_DY'
+# name = 'MMS_deeplab_2%_D_CM_DY'
+name = 'MMS_deeplab_2%_A_CM_DY'
 # hyperparameter
 default_config = dict(
     batch_size=8,

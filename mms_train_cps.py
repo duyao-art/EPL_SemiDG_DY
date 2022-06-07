@@ -170,8 +170,8 @@ def total_dice_loss(pred, target):
 def ini_model_dy(restore=False, restore_from=None):
 
     if restore:
-        model_path_l = './tmodel/' + 'l_' + str(restore_from)
-        model_path_r = './tmodel/' + 'r_' + str(restore_from)
+        model_path_l = './tmodel/cps/' + 'l_' + str(restore_from)
+        model_path_r = './tmodel/cps/' + 'r_' + str(restore_from)
         model_l = torch.load(model_path_l)
         model_r = torch.load(model_path_r)
         print("restore from", model_path_l)
@@ -195,7 +195,7 @@ def ini_model_dy(restore=False, restore_from=None):
 def create_model(ema=False, restore=False, restore_from=None):
 
     if restore:
-        model_path = './tmodel/' + str(restore_from)
+        model_path = './tmodel/cps/' + str(restore_from)
         model = torch.load(model_path)
         print("restore from", model_path)
     else:
@@ -631,8 +631,8 @@ def train_dy(label_loader, unlabel_loader_0, unlabel_loader_1, test_loader, val_
         if val_dice > best_dice:
             best_dice = val_dice
             print('saving model with best_dice {:.5f}'.format(best_dice))
-            model_name_l = './tmodel/' + 'l_' + model_path
-            model_name_r = './tmodel/' + 'r_' + model_path
+            model_name_l = './tmodel/cps/' + 'l_' + model_path
+            model_name_r = './tmodel/cps/' + 'r_' + model_path
             torch.save(model_l.module, model_name_l)
             torch.save(model_r.module, model_name_r)
 
