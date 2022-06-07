@@ -25,7 +25,7 @@ default_config = dict(
 
     train_name=name,
     model_path=name+'.pt',
-    test_vendor='D',
+    test_vendor='A',
     ratio=0.02,                   # 2%
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
