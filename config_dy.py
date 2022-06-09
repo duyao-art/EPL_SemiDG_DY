@@ -1,6 +1,6 @@
-# name = 'MMS_deeplab_2%_D_CM_DY'
+name = 'MMS_deeplab_2%_D_CM_DY'
 # name = 'MMS_deeplab_2%_B_CM_DY'
-name = 'MMS_deeplab_2%_C_CM_DY'
+# name = 'MMS_deeplab_2%_C_CM_DY'
 # hyperparameter
 default_config = dict(
     batch_size=8,
@@ -14,7 +14,6 @@ default_config = dict(
     # stop training to avoid overfitting
     b=0.23150,
     num_class=4,
-
     # unsupervised
     # 取熵最大的前20%作为unreliable unlabeled data.
     # 取剩余的80%作为reliable labeled data.
@@ -27,12 +26,12 @@ default_config = dict(
 
     train_name=name,
     model_path=name+'.pt',
-    test_vendor='C',
+    test_vendor='D',
     ratio=0.02,                   # 2%
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
 
-    gpus=[2],
+    gpus=[3],
     ifFast=False,
     Pretrain=True,
     # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
