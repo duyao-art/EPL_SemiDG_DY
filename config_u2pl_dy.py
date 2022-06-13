@@ -37,7 +37,7 @@ default_config = dict(
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
 
-    gpus=[4,5],
+    gpus=[6],
     ifFast=False,
     Pretrain=True,
     pretrain_file='/home/listu/yaodu/MMData/resnet50_v1c.pth',

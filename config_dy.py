@@ -1,6 +1,9 @@
-name = 'MMS_deeplab_2%_D_CM_DY'
+name = 'MMS_deeplab_2%_A_CM_DY'
 # name = 'MMS_deeplab_2%_B_CM_DY'
 # name = 'MMS_deeplab_2%_C_CM_DY'
+# name = 'MMS_deeplab_2%_D_CM_DY'
+
+
 # hyperparameter
 default_config = dict(
     batch_size=8,
@@ -26,12 +29,12 @@ default_config = dict(
 
     train_name=name,
     model_path=name+'.pt',
-    test_vendor='D',
+    test_vendor='A',
     ratio=0.02,                   # 2%
     # this parameter can be revised based on k-fold validation
     CPS_weight=3,
 
-    gpus=[3],
+    gpus=[0],
     ifFast=False,
     Pretrain=True,
     # pretrain_file='/home/duyao/my_data/duyao/MMData/resnet50_v1c.pth',
